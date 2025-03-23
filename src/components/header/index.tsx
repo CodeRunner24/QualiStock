@@ -1,59 +1,60 @@
-import type { RefineThemedLayoutV2HeaderProps } from "@refinedev/antd";
-import { useGetIdentity } from "@refinedev/core";
+import { useGetIdentity } from '@refinedev/core';
 import {
   Layout as AntdLayout,
+  Typography,
   Avatar,
   Space,
-  Switch,
   theme,
-  Typography,
-} from "antd";
-import React, { useContext } from "react";
-import { ColorModeContext } from "../../contexts/color-mode";
+  Badge,
+} from 'antd';
+import React from 'react';
+import { BellOutlined } from '@ant-design/icons';
 
 const { Text } = Typography;
 const { useToken } = theme;
 
-type IUser = {
-  id: number;
-  name: string;
-  avatar: string;
-};
-
-export const Header: React.FC<RefineThemedLayoutV2HeaderProps> = ({
-  sticky = true,
-}) => {
+export const Header: React.FC = () => {
   const { token } = useToken();
-  const { data: user } = useGetIdentity<IUser>();
-  const { mode, setMode } = useContext(ColorModeContext);
+  const { data: user } = useGetIdentity<{
+    name: string;
+    avatar: string;
+  }>();
 
   const headerStyles: React.CSSProperties = {
-    backgroundColor: token.colorBgElevated,
-    display: "flex",
-    justifyContent: "flex-end",
-    alignItems: "center",
-    padding: "0px 24px",
-    height: "64px",
+    background: token.colorBgElevated,
+    display: 'flex',
+    justifyContent: 'flex-end',
+    alignItems: 'center',
+    padding: '0px 24px',
+    height: '64px',
   };
-
-  if (sticky) {
-    headerStyles.position = "sticky";
-    headerStyles.top = 0;
-    headerStyles.zIndex = 1;
-  }
 
   return (
     <AntdLayout.Header style={headerStyles}>
       <Space>
-        <Switch
-          checkedChildren="🌛"
-          unCheckedChildren="🔆"
-          onChange={() => setMode(mode === "light" ? "dark" : "light")}
-          defaultChecked={mode === "dark"}
-        />
-        <Space style={{ marginLeft: "8px" }} size="middle">
-          {user?.name && <Text strong>{user.name}</Text>}
-          {user?.avatar && <Avatar src={user?.avatar} alt={user?.name} />}
+        <Badge count={3}>
+          <BellOutlined
+            style={{
+              fontSize: '20px',
+              color: token.colorPrimary,
+              cursor: 'pointer',
+            }}
+          />
+        </Badge>
+        <Space size="middle">
+          {user?.name && (
+            <Text strong style={{ marginRight: '8px' }}>
+              {user.name}
+            </Text>
+          )}
+          {user?.avatar && (
+            <Avatar
+              src={user?.avatar}
+              alt={user?.name}
+              size="large"
+              style={{ cursor: 'pointer' }}
+            />
+          )}
         </Space>
       </Space>
     </AntdLayout.Header>
