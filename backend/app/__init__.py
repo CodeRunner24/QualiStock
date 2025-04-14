@@ -1,1 +1,0 @@
-# QualiStock API 
