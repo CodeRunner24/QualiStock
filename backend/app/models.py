@@ -100,18 +100,4 @@ class Forecast(Base):
     notes = Column(Text, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
     
-    product = relationship("Product")
-
-
-# Trend modeli
-class MarketTrend(Base):
-    __tablename__ = "market_trends"
-
-    id = Column(Integer, primary_key=True, index=True)
-    category_id = Column(Integer, ForeignKey("categories.id"))
-    trend_date = Column(DateTime)
-    trend_description = Column(Text)
-    impact_level = Column(Float)  # 0-1 arasında etki seviyesi
-    created_at = Column(DateTime, default=datetime.utcnow)
-    
-    category = relationship("Category") 
+    product = relationship("Product") 

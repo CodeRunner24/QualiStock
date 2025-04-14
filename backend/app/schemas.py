@@ -13,6 +13,9 @@ class UserBase(BaseModel):
 class UserCreate(UserBase):
     password: str
 
+class UserUpdate(UserBase):
+    password: Optional[str] = None
+
 class User(UserBase):
     id: int
 
@@ -35,6 +38,9 @@ class CategoryBase(BaseModel):
 class CategoryCreate(CategoryBase):
     pass
 
+class CategoryUpdate(CategoryBase):
+    pass
+
 class Category(CategoryBase):
     id: int
 
@@ -50,6 +56,9 @@ class ProductBase(BaseModel):
     unit_price: float
 
 class ProductCreate(ProductBase):
+    pass
+
+class ProductUpdate(ProductBase):
     pass
 
 class Product(ProductBase):
@@ -72,6 +81,9 @@ class StockItemBase(BaseModel):
 class StockItemCreate(StockItemBase):
     pass
 
+class StockItemUpdate(StockItemBase):
+    pass
+
 class StockItem(StockItemBase):
     id: int
     created_at: datetime
@@ -89,6 +101,9 @@ class QualityCheckBase(BaseModel):
     checked_by: int
 
 class QualityCheckCreate(QualityCheckBase):
+    pass
+
+class QualityCheckUpdate(QualityCheckBase):
     pass
 
 class QualityCheck(QualityCheckBase):
@@ -109,24 +124,10 @@ class ForecastBase(BaseModel):
 class ForecastCreate(ForecastBase):
     pass
 
-class Forecast(ForecastBase):
-    id: int
-    created_at: datetime
-
-    class Config:
-        orm_mode = True
-
-# Market Trend schemas
-class MarketTrendBase(BaseModel):
-    category_id: int
-    trend_date: datetime
-    trend_description: str
-    impact_level: float = Field(..., ge=0.0, le=1.0)
-
-class MarketTrendCreate(MarketTrendBase):
+class ForecastUpdate(ForecastBase):
     pass
 
-class MarketTrend(MarketTrendBase):
+class Forecast(ForecastBase):
     id: int
     created_at: datetime
 

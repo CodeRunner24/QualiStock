@@ -2,7 +2,11 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from .database import engine
 from . import models
-from .routers import auth, dashboard, stock, quality, expiration, forecasting, categories
+from .routers import auth, dashboard, quality, expiration, forecasting
+from .controllers.category_controller import CategoryController
+from .controllers.product_controller import ProductController
+from .controllers.user_controller import UserController
+from .controllers.stock_item_controller import StockItemController
 
 # Veritabanı tabloları oluştur
 models.Base.metadata.create_all(bind=engine)
@@ -31,11 +35,22 @@ app.add_middleware(
 # Router'ları dahil et
 app.include_router(auth.router)
 app.include_router(dashboard.router)
-app.include_router(stock.router)
 app.include_router(quality.router)
 app.include_router(expiration.router)
 app.include_router(forecasting.router)
-app.include_router(categories.router)
+
+# Yeni mimari için controller'ları dahil et
+category_controller = CategoryController()
+app.include_router(category_controller.router)
+
+product_controller = ProductController()
+app.include_router(product_controller.router)
+
+user_controller = UserController()
+app.include_router(user_controller.router)
+
+stock_item_controller = StockItemController()
+app.include_router(stock_item_controller.router)
 
 @app.get("/")
 async def root():
@@ -144,19 +159,6 @@ async def init_test_data():
                 ))
         
         db.add_all(forecasts)
-        db.commit()
-        
-        # Piyasa trendleri oluştur
-        trends = []
-        for category in categories:
-            trends.append(models.MarketTrend(
-                category_id=category.id,
-                trend_date=now + timedelta(days=30),
-                trend_description=f"{category.name} için piyasa trendi",
-                impact_level=round(random.uniform(0.3, 0.8), 2)
-            ))
-        
-        db.add_all(trends)
         db.commit()
         
         return {"message": "Test verileri başarıyla oluşturuldu"}

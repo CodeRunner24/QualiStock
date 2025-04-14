@@ -119,57 +119,6 @@ async def delete_forecast(forecast_id: int, db: Session = Depends(get_db)):
     db.commit()
     return None
 
-@router.post("/trends/", response_model=schemas.MarketTrend)
-async def create_market_trend(trend: schemas.MarketTrendCreate, db: Session = Depends(get_db)):
-    """
-    Yeni bir piyasa trendi oluşturur.
-    """
-    # Kategorinin var olup olmadığını kontrol et
-    category = db.query(models.Category).filter(models.Category.id == trend.category_id).first()
-    if not category:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Category with id {trend.category_id} not found"
-        )
-    
-    # Yeni trend oluştur
-    db_trend = models.MarketTrend(**trend.dict())
-    db.add(db_trend)
-    db.commit()
-    db.refresh(db_trend)
-    return db_trend
-
-@router.get("/trends/", response_model=List[schemas.MarketTrend])
-async def read_market_trends(
-    skip: int = 0, 
-    limit: int = 100, 
-    category_id: Optional[int] = None,
-    min_impact: Optional[float] = None,
-    start_date: Optional[datetime] = None,
-    end_date: Optional[datetime] = None,
-    db: Session = Depends(get_db)
-):
-    """
-    Piyasa trendlerini listeler. Filtreleme parametreleri kullanılabilir.
-    """
-    query = db.query(models.MarketTrend)
-    
-    # Filtreleme
-    if category_id:
-        query = query.filter(models.MarketTrend.category_id == category_id)
-    if min_impact is not None:
-        query = query.filter(models.MarketTrend.impact_level >= min_impact)
-    if start_date:
-        query = query.filter(models.MarketTrend.trend_date >= start_date)
-    if end_date:
-        query = query.filter(models.MarketTrend.trend_date <= end_date)
-    
-    # Trend tarihine göre sırala (en yeni üstte)
-    query = query.order_by(models.MarketTrend.trend_date.desc())
-    
-    trends = query.offset(skip).limit(limit).all()
-    return trends
-
 @router.get("/stats/top-products", response_model=List[dict])
 async def get_top_demand_products(
     limit: int = 10,

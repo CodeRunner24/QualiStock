@@ -26,15 +26,14 @@ def get_password_hash(password):
     return pwd_context.hash(password)
 
 def get_user(db: Session, username: str):
-    return db.query(models.User).filter(models.User.username == username).first()
+    from .services.user_service import UserService
+    user_service = UserService()
+    return user_service.get_user_by_username(db, username)
 
 def authenticate_user(db: Session, username: str, password: str):
-    user = get_user(db, username)
-    if not user:
-        return False
-    if not verify_password(password, user.hashed_password):
-        return False
-    return user
+    from .services.user_service import UserService
+    user_service = UserService()
+    return user_service.authenticate_user(db, username, password)
 
 def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
     to_encode = data.copy()
@@ -70,7 +69,7 @@ async def get_current_active_user(current_user: schemas.User = Depends(get_curre
         raise HTTPException(status_code=400, detail="Inactive user")
     return current_user
 
-async def get_admin_user(current_user: schemas.User = Depends(get_current_active_user)):
+async def get_current_admin_user(current_user: schemas.User = Depends(get_current_active_user)):
     if not current_user.is_admin:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
