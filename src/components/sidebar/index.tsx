@@ -1,6 +1,6 @@
 import React from 'react';
 import { Layout, Menu } from 'antd';
-import { Link } from 'react-router';
+import { Link } from 'react-router-dom';
 import {
   DashboardOutlined,
   DatabaseOutlined,

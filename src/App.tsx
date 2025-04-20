@@ -24,7 +24,7 @@ import routerBindings, {
 import dataProvider from '@refinedev/simple-rest';
 import { App as AntdApp } from 'antd';
 import axios from 'axios';
-import { BrowserRouter, Outlet, Route, Routes } from 'react-router';
+import { BrowserRouter, Outlet, Route, Routes } from 'react-router-dom';
 import { useEffect, useState } from 'react';
 import { Header } from './components/header';
 import { ColorModeContextProvider } from './contexts/color-mode';
@@ -53,7 +53,7 @@ function App() {
     const storedUser = localStorage.getItem('qualistock_user');
     if (storedUser) {
       setUser(JSON.parse(storedUser));
-      
+
       // Token varsa, API isteklerine ekleme
       const token = localStorage.getItem('qualistock_token');
       if (token) {
@@ -74,11 +74,11 @@ function App() {
             'Content-Type': 'application/x-www-form-urlencoded',
           },
           body: new URLSearchParams({
-            'username': username,
-            'password': password,
-          })
+            username: username,
+            password: password,
+          }),
         });
-        
+
         // API yanıtını kontrol et
         if (!response.ok) {
           const errorData = await response.json();
@@ -87,29 +87,33 @@ function App() {
             success: false,
             error: {
               name: 'Login Failed',
-              message: errorData.detail || 'Geçersiz kullanıcı adı/e-posta veya şifre',
+              message:
+                errorData.detail || 'Geçersiz kullanıcı adı/e-posta veya şifre',
             },
           };
         }
-        
+
         const data = await response.json();
-        
+
         // Token'ı localStorage'a kaydet
         localStorage.setItem('qualistock_token', data.access_token);
-        
+
         // Kullanıcı bilgilerini al
-        const userResponse = await fetch('http://localhost:8001/auth/users/me', {
-          headers: {
-            'Authorization': `Bearer ${data.access_token}`,
-          },
-        });
-        
+        const userResponse = await fetch(
+          'http://localhost:8001/auth/users/me',
+          {
+            headers: {
+              Authorization: `Bearer ${data.access_token}`,
+            },
+          }
+        );
+
         if (userResponse.ok) {
           const userData = await userResponse.json();
           localStorage.setItem('qualistock_user', JSON.stringify(userData));
           setUser(userData);
         }
-        
+
         return {
           success: true,
           redirectTo: '/dashboard',
@@ -130,7 +134,7 @@ function App() {
       localStorage.removeItem('qualistock_user');
       localStorage.removeItem('qualistock_token');
       setUser(null);
-      
+
       return {
         success: true,
         redirectTo: '/login',
@@ -148,21 +152,21 @@ function App() {
           // Token geçerli mi kontrol et
           const response = await fetch('http://localhost:8001/auth/users/me', {
             headers: {
-              'Authorization': `Bearer ${token}`,
+              Authorization: `Bearer ${token}`,
             },
           });
-          
+
           if (response.ok) {
             // Kullanıcı bilgilerini güncelle
             const userData = await response.json();
             localStorage.setItem('qualistock_user', JSON.stringify(userData));
             setUser(userData);
-            
+
             return {
               authenticated: true,
             };
           }
-          
+
           // Token geçersizse temizle
           localStorage.removeItem('qualistock_token');
           localStorage.removeItem('qualistock_user');
@@ -171,7 +175,7 @@ function App() {
           console.error('Authentication check error:', error);
         }
       }
-      
+
       return {
         authenticated: false,
         error: {
@@ -189,10 +193,10 @@ function App() {
         try {
           const response = await fetch('http://localhost:8001/auth/users/me', {
             headers: {
-              'Authorization': `Bearer ${token}`,
+              Authorization: `Bearer ${token}`,
             },
           });
-          
+
           if (response.ok) {
             return await response.json();
           }
@@ -200,12 +204,12 @@ function App() {
           console.error('Get identity error:', error);
         }
       }
-      
+
       const storedUser = localStorage.getItem('qualistock_user');
       if (storedUser) {
         return JSON.parse(storedUser) as User;
       }
-      
+
       return null;
     },
   };

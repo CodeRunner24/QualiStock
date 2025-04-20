@@ -16,11 +16,37 @@ const api = axios.create({
   withCredentials: false, // CORS isteklerinde kimlik bilgilerini gönderme
 });
 
+// Token'ı manuel olarak ayarlamak için yardımcı fonksiyon
+export const setAuthToken = (token: string) => {
+  if (token) {
+    localStorage.setItem(TOKEN_KEY, token);
+    // Axios instanceına default header ekle
+    api.defaults.headers.common['Authorization'] = `Bearer ${token}`;
+    console.log('Auth token set:', token.substring(0, 15) + '...');
+    return true;
+  }
+  return false;
+};
+
+// Token'ı kaldırmak için yardımcı fonksiyon
+export const removeAuthToken = () => {
+  localStorage.removeItem(TOKEN_KEY);
+  delete api.defaults.headers.common['Authorization'];
+  console.log('Auth token removed');
+};
+
+// Başlangıçta token varsa, api instance'ına ekle
+const storedToken = localStorage.getItem(TOKEN_KEY);
+if (storedToken) {
+  api.defaults.headers.common['Authorization'] = `Bearer ${storedToken}`;
+  console.log('Auth token loaded from storage');
+}
+
 // İstek interceptor'u - her istekte token ekle
 api.interceptors.request.use(
   (config) => {
     const token = localStorage.getItem(TOKEN_KEY);
-    if (token) {
+    if (token && !config.headers.Authorization) {
       config.headers.Authorization = `Bearer ${token}`;
     }
     console.log('API Request:', {
@@ -28,7 +54,7 @@ api.interceptors.request.use(
       method: config.method,
       headers: config.headers,
       data: config.data,
-      params: config.params
+      params: config.params,
     });
     return config;
   },
@@ -44,31 +70,64 @@ api.interceptors.response.use(
     console.log('API Response:', {
       status: response.status,
       url: response.config.url,
-      data: response.data
+      data: response.data,
     });
     return response;
   },
   (error) => {
     console.error('API Error:', {
       message: error.message,
-      response: error.response ? {
-        status: error.response.status,
-        data: error.response.data,
-        url: error.config?.url
-      } : null,
-      request: error.request || null
+      response: error.response
+        ? {
+            status: error.response.status,
+            data: error.response.data,
+            url: error.config?.url,
+          }
+        : null,
+      request: error.request || null,
     });
-    // Oturum hatası durumunda
+
+    // Oturum hatası durumunda (401 Unauthorized)
     if (error.response && error.response.status === 401) {
-      // Token ile ilgili sorunlarda token'ı temizle
+      console.log(
+        '401 Unauthorized error detected. Current path:',
+        window.location.pathname
+      );
+
+      // Token ile ilgili sorunlarda token'ı sil, ancak yönlendirme yapma
+      // login sayfasında değilse ve auth token isteği değilse
       if (error.config && !error.config.url?.includes('/auth/token')) {
-        localStorage.removeItem(TOKEN_KEY);
-        // Token geçersiz ise, kullanıcıyı login sayfasına yönlendir
-        if (window.location.pathname !== '/login') {
-          window.location.href = '/login';
+        // Token hala localStorage'da var mı kontrol et
+        const token = localStorage.getItem(TOKEN_KEY);
+        if (token) {
+          console.log('Token found, but API returned 401. Removing token:', {
+            tokenPrefix: token.substring(0, 10) + '...',
+            url: error.config.url,
+          });
+
+          // Token'ı kaldır
+          removeAuthToken();
+
+          // Şu anda login sayfasında değilsek ve stock sayfasında değilsek, o zaman yönlendir
+          if (
+            window.location.pathname !== '/login' &&
+            window.location.pathname !== '/stock'
+          ) {
+            console.log('Redirecting to login page due to 401 error');
+            // Bu biraz gecikmeyle gerçekleşmeli, böylece mevcut kod akışı tamamlanabilir
+            setTimeout(() => {
+              window.location.href = '/login';
+            }, 100);
+          } else {
+            console.log(
+              'Not redirecting due to being on:',
+              window.location.pathname
+            );
+          }
         }
       }
     }
+
     return Promise.reject(error);
   }
 );
@@ -80,35 +139,36 @@ export const authService = {
       const formData = new FormData();
       formData.append('username', username);
       formData.append('password', password);
-      
+
       console.log('Login attempt:', { username });
-      
+
       const response = await api.post('/auth/token', formData, {
         headers: {
           'Content-Type': 'multipart/form-data',
         },
       });
-      
+
       if (response.data.access_token) {
-        localStorage.setItem(TOKEN_KEY, response.data.access_token);
+        // Token'ı setAuthToken yardımcı fonksiyonu ile kaydet
+        setAuthToken(response.data.access_token);
         console.log('Login successful, token stored');
       } else {
         console.error('Login response missing token:', response.data);
         throw new Error('Geçersiz yanıt: Token bulunamadı');
       }
-      
+
       return response.data;
     } catch (error) {
       console.error('Login error:', error);
       throw error;
     }
   },
-  
+
   logout: () => {
-    localStorage.removeItem(TOKEN_KEY);
+    removeAuthToken();
     console.log('User logged out, token removed');
   },
-  
+
   isAuthenticated: () => {
     const hasToken = !!localStorage.getItem(TOKEN_KEY);
     console.log('Authentication check:', hasToken);
@@ -119,22 +179,22 @@ export const authService = {
 export const userService = {
   register: async (userData: any) => {
     try {
-      console.log('Registering user:', { 
-        username: userData.username, 
-        email: userData.email 
+      console.log('Registering user:', {
+        username: userData.username,
+        email: userData.email,
       });
-      
+
       // UserCreate şemasındaki alanları doğru şekilde eşleştir
       const userPayload = {
         username: userData.username,
         email: userData.email,
         password: userData.password,
         is_active: userData.is_active !== undefined ? userData.is_active : true,
-        is_admin: userData.is_admin !== undefined ? userData.is_admin : false
+        is_admin: userData.is_admin !== undefined ? userData.is_admin : false,
       };
-      
+
       console.log('Sending user data:', userPayload);
-      
+
       // Kayıt isteğini gönder
       const response = await api.post('/users/register', userPayload);
       console.log('Registration successful:', response.data);
@@ -144,7 +204,7 @@ export const userService = {
       throw error;
     }
   },
-  
+
   getProfile: async () => {
     try {
       const response = await api.get('/users/me');
@@ -154,7 +214,7 @@ export const userService = {
       throw error;
     }
   },
-  
+
   updateProfile: async (userData: any) => {
     try {
       const response = await api.put('/users/me', userData);
@@ -164,7 +224,7 @@ export const userService = {
       throw error;
     }
   },
-  
+
   getAllUsers: async () => {
     try {
       const response = await api.get('/users/');
@@ -174,7 +234,7 @@ export const userService = {
       throw error;
     }
   },
-  
+
   getUserById: async (id: number) => {
     try {
       const response = await api.get(`/users/${id}`);
@@ -184,7 +244,7 @@ export const userService = {
       throw error;
     }
   },
-  
+
   updateUser: async (id: number, userData: any) => {
     try {
       const response = await api.put(`/users/${id}`, userData);
@@ -194,7 +254,7 @@ export const userService = {
       throw error;
     }
   },
-  
+
   deleteUser: async (id: number) => {
     try {
       const response = await api.delete(`/users/${id}`);
@@ -203,7 +263,7 @@ export const userService = {
       console.error(`Delete user ${id} error:`, error);
       throw error;
     }
-  }
+  },
 };
 
 export const categoryService = {
@@ -234,7 +294,14 @@ export const categoryService = {
 };
 
 export const productService = {
-  getAll: async (params: { skip?: number, limit?: number, category_id?: number, name?: string } = {}) => {
+  getAll: async (
+    params: {
+      skip?: number;
+      limit?: number;
+      category_id?: number;
+      name?: string;
+    } = {}
+  ) => {
     try {
       const response = await api.get('/products/', { params });
       return response.data;
@@ -243,7 +310,7 @@ export const productService = {
       throw error;
     }
   },
-  
+
   getById: async (id: number) => {
     try {
       const response = await api.get(`/products/${id}`);
@@ -253,22 +320,23 @@ export const productService = {
       throw error;
     }
   },
-  
+
   create: async (data: any) => {
     try {
       console.log('Creating product:', data);
-      
+
       // ProductCreate şemasındaki alanları doğru şekilde eşleştir
       const productPayload = {
         name: data.name,
         sku: data.sku,
         description: data.description || '',
         category_id: Number(data.category_id),
-        unit_price: Number(data.unit_price)
+        unit_price: Number(data.unit_price),
       };
-      
+
       console.log('Sending product data:', productPayload);
-      
+
+      // Doğru API yolunu ve veri formatını kullanın
       const response = await api.post('/products/', productPayload);
       console.log('Product created successfully:', response.data);
       return response.data;
@@ -277,7 +345,7 @@ export const productService = {
       throw error;
     }
   },
-  
+
   update: async (id: number, data: any) => {
     try {
       const productPayload = {
@@ -285,9 +353,9 @@ export const productService = {
         sku: data.sku,
         description: data.description || '',
         category_id: Number(data.category_id),
-        unit_price: Number(data.unit_price)
+        unit_price: Number(data.unit_price),
       };
-      
+
       const response = await api.put(`/products/${id}`, productPayload);
       return response.data;
     } catch (error) {
@@ -295,7 +363,7 @@ export const productService = {
       throw error;
     }
   },
-  
+
   delete: async (id: number) => {
     try {
       const response = await api.delete(`/products/${id}`);
@@ -305,7 +373,7 @@ export const productService = {
       throw error;
     }
   },
-  
+
   getStockItems: async (id: number) => {
     try {
       const response = await api.get(`/products/${id}/stock`);
@@ -314,18 +382,20 @@ export const productService = {
       console.error(`Get stock items for product ${id} error:`, error);
       throw error;
     }
-  }
+  },
 };
 
 export const stockItemService = {
-  getAll: async (params: { 
-    skip?: number, 
-    limit?: number, 
-    product_id?: number, 
-    location?: string,
-    low_stock?: boolean,
-    expiring_soon?: boolean
-  } = {}) => {
+  getAll: async (
+    params: {
+      skip?: number;
+      limit?: number;
+      product_id?: number;
+      location?: string;
+      low_stock?: boolean;
+      expiring_soon?: boolean;
+    } = {}
+  ) => {
     try {
       const response = await api.get('/stock-items/', { params });
       return response.data;
@@ -334,7 +404,7 @@ export const stockItemService = {
       throw error;
     }
   },
-  
+
   getById: async (id: number) => {
     try {
       const response = await api.get(`/stock-items/${id}`);
@@ -344,22 +414,26 @@ export const stockItemService = {
       throw error;
     }
   },
-  
+
   create: async (data: any) => {
     try {
       console.log('Creating stock item:', data);
-      
+
       // Tarih değerlerini düzenle
       const stockItemPayload = {
         ...data,
         product_id: Number(data.product_id),
         quantity: Number(data.quantity),
-        manufacturing_date: data.manufacturing_date ? new Date(data.manufacturing_date).toISOString() : null,
-        expiration_date: data.expiration_date ? new Date(data.expiration_date).toISOString() : null
+        manufacturing_date: data.manufacturing_date
+          ? new Date(data.manufacturing_date).toISOString()
+          : null,
+        expiration_date: data.expiration_date
+          ? new Date(data.expiration_date).toISOString()
+          : null,
       };
-      
+
       console.log('Sending stock item data:', stockItemPayload);
-      
+
       const response = await api.post('/stock-items/', stockItemPayload);
       return response.data;
     } catch (error) {
@@ -367,7 +441,7 @@ export const stockItemService = {
       throw error;
     }
   },
-  
+
   update: async (id: number, data: any) => {
     try {
       // Tarih değerlerini düzenle
@@ -375,10 +449,14 @@ export const stockItemService = {
         ...data,
         product_id: Number(data.product_id),
         quantity: Number(data.quantity),
-        manufacturing_date: data.manufacturing_date ? new Date(data.manufacturing_date).toISOString() : null,
-        expiration_date: data.expiration_date ? new Date(data.expiration_date).toISOString() : null
+        manufacturing_date: data.manufacturing_date
+          ? new Date(data.manufacturing_date).toISOString()
+          : null,
+        expiration_date: data.expiration_date
+          ? new Date(data.expiration_date).toISOString()
+          : null,
       };
-      
+
       const response = await api.put(`/stock-items/${id}`, stockItemPayload);
       return response.data;
     } catch (error) {
@@ -386,7 +464,7 @@ export const stockItemService = {
       throw error;
     }
   },
-  
+
   delete: async (id: number) => {
     try {
       const response = await api.delete(`/stock-items/${id}`);
@@ -396,26 +474,4 @@ export const stockItemService = {
       throw error;
     }
   },
-  
-  getExpiringSoonCount: async (days: number = 30) => {
-    try {
-      const response = await api.get(`/stock-items/analytics/expiring-soon-count`, { params: { days } });
-      return response.data.count;
-    } catch (error) {
-      console.error('Get expiring soon count error:', error);
-      throw error;
-    }
-  },
-  
-  getLowStockCount: async (threshold: number = 10) => {
-    try {
-      const response = await api.get(`/stock-items/analytics/low-stock-count`, { params: { threshold } });
-      return response.data.count;
-    } catch (error) {
-      console.error('Get low stock count error:', error);
-      throw error;
-    }
-  }
 };
-
-export default api;

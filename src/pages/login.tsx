@@ -1,7 +1,18 @@
 import { useLogin } from '@refinedev/core';
 import { ThemedTitleV2 } from '@refinedev/antd';
-import { Button, Layout, Typography, Form, Input, Card, Alert, Tabs, message } from 'antd';
+import {
+  Button,
+  Layout,
+  Typography,
+  Form,
+  Input,
+  Card,
+  Alert,
+  Tabs,
+  message,
+} from 'antd';
 import { useState } from 'react';
+import { setAuthToken } from '../services/api';
 
 type LoginFormValues = {
   username: string;
@@ -18,8 +29,9 @@ type SignupFormValues = {
 export const Login: React.FC = () => {
   const { mutate: login, isLoading, error } = useLogin();
   const [loginError, setLoginError] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<string>("login");
+  const [activeTab, setActiveTab] = useState<string>('login');
   const [form] = Form.useForm();
+  const [tokenForm] = Form.useForm();
 
   const handleLogin = (values: LoginFormValues) => {
     login(values, {
@@ -27,8 +39,11 @@ export const Login: React.FC = () => {
         setLoginError(null);
       },
       onError: (error) => {
-        setLoginError(error?.message || 'Giriş başarısız. Lütfen bilgilerinizi kontrol edin.');
-      }
+        setLoginError(
+          error?.message ||
+            'Giriş başarısız. Lütfen bilgilerinizi kontrol edin.'
+        );
+      },
     });
   };
 
@@ -59,11 +74,24 @@ export const Login: React.FC = () => {
       }
 
       message.success('Kayıt başarılı! Şimdi giriş yapabilirsiniz.');
-      setActiveTab("login");
+      setActiveTab('login');
       form.resetFields();
     } catch (error) {
       console.error('Registration error:', error);
       message.error('Kayıt sırasında bir hata oluştu!');
+    }
+  };
+
+  const handleTokenLogin = (values: { token: string }) => {
+    if (setAuthToken(values.token)) {
+      message.success(
+        'Token başarıyla ayarlandı. Anasayfaya yönlendiriliyorsunuz...'
+      );
+      setTimeout(() => {
+        window.location.href = '/';
+      }, 1000);
+    } else {
+      message.error('Geçersiz token. Lütfen doğru bir token giriniz.');
     }
   };
 
@@ -107,15 +135,25 @@ export const Login: React.FC = () => {
                   <Form.Item
                     label="Kullanıcı Adı veya E-posta"
                     name="username"
-                    rules={[{ required: true, message: 'Lütfen kullanıcı adınızı girin!' }]}
+                    rules={[
+                      {
+                        required: true,
+                        message: 'Lütfen kullanıcı adınızı girin!',
+                      },
+                    ]}
                   >
-                    <Input placeholder="Kullanıcı adı veya e-posta girin" size="large" />
+                    <Input
+                      placeholder="Kullanıcı adı veya e-posta girin"
+                      size="large"
+                    />
                   </Form.Item>
 
                   <Form.Item
                     label="Şifre"
                     name="password"
-                    rules={[{ required: true, message: 'Lütfen şifrenizi girin!' }]}
+                    rules={[
+                      { required: true, message: 'Lütfen şifrenizi girin!' },
+                    ]}
                   >
                     <Input.Password placeholder="Şifre girin" size="large" />
                   </Form.Item>
@@ -142,10 +180,11 @@ export const Login: React.FC = () => {
                     </Button>
                   </Form.Item>
 
-                  <Typography.Text type="secondary" style={{ display: 'block', textAlign: 'center' }}>
-                    <small>
-                      Varsayılan kullanıcı: admin / 123456
-                    </small>
+                  <Typography.Text
+                    type="secondary"
+                    style={{ display: 'block', textAlign: 'center' }}
+                  >
+                    <small>Varsayılan kullanıcı: admin / 123456</small>
                   </Typography.Text>
                 </Form>
               ),
@@ -163,19 +202,34 @@ export const Login: React.FC = () => {
                     label="E-posta"
                     name="email"
                     rules={[
-                      { required: true, message: 'Lütfen e-posta adresinizi girin!' },
-                      { type: 'email', message: 'Lütfen geçerli bir e-posta adresi girin!' }
+                      {
+                        required: true,
+                        message: 'Lütfen e-posta adresinizi girin!',
+                      },
+                      {
+                        type: 'email',
+                        message: 'Lütfen geçerli bir e-posta adresi girin!',
+                      },
                     ]}
                   >
-                    <Input placeholder="E-posta adresinizi girin" size="large" />
+                    <Input
+                      placeholder="E-posta adresinizi girin"
+                      size="large"
+                    />
                   </Form.Item>
 
                   <Form.Item
                     label="Kullanıcı Adı"
                     name="username"
                     rules={[
-                      { required: true, message: 'Lütfen kullanıcı adı girin!' },
-                      { min: 4, message: 'Kullanıcı adı en az 4 karakter olmalıdır!' }
+                      {
+                        required: true,
+                        message: 'Lütfen kullanıcı adı girin!',
+                      },
+                      {
+                        min: 4,
+                        message: 'Kullanıcı adı en az 4 karakter olmalıdır!',
+                      },
                     ]}
                   >
                     <Input placeholder="Kullanıcı adı girin" size="large" />
@@ -186,7 +240,7 @@ export const Login: React.FC = () => {
                     name="password"
                     rules={[
                       { required: true, message: 'Lütfen şifre girin!' },
-                      { min: 6, message: 'Şifre en az 6 karakter olmalıdır!' }
+                      { min: 6, message: 'Şifre en az 6 karakter olmalıdır!' },
                     ]}
                   >
                     <Input.Password placeholder="Şifre girin" size="large" />
@@ -196,30 +250,73 @@ export const Login: React.FC = () => {
                     label="Şifre Tekrar"
                     name="confirmPassword"
                     rules={[
-                      { required: true, message: 'Lütfen şifrenizi tekrar girin!' },
+                      {
+                        required: true,
+                        message: 'Lütfen şifrenizi tekrar girin!',
+                      },
                       ({ getFieldValue }) => ({
                         validator(_, value) {
                           if (!value || getFieldValue('password') === value) {
                             return Promise.resolve();
                           }
-                          return Promise.reject(new Error('İki şifre eşleşmiyor!'));
+                          return Promise.reject(
+                            new Error('İki şifre eşleşmiyor!')
+                          );
                         },
                       }),
                     ]}
                   >
-                    <Input.Password placeholder="Şifrenizi tekrar girin" size="large" />
+                    <Input.Password
+                      placeholder="Şifrenizi tekrar girin"
+                      size="large"
+                    />
                   </Form.Item>
 
                   <Form.Item>
-                    <Button
-                      type="primary"
-                      size="large"
-                      htmlType="submit"
-                      block
-                    >
+                    <Button type="primary" size="large" htmlType="submit" block>
                       Kayıt Ol
                     </Button>
                   </Form.Item>
+                </Form>
+              ),
+            },
+            {
+              key: 'token',
+              label: 'Token ile Giriş',
+              children: (
+                <Form
+                  layout="vertical"
+                  requiredMark={false}
+                  onFinish={handleTokenLogin}
+                  form={tokenForm}
+                >
+                  <Form.Item
+                    label="API Token"
+                    name="token"
+                    rules={[
+                      { required: true, message: 'Lütfen API token giriniz!' },
+                    ]}
+                  >
+                    <Input.TextArea
+                      placeholder="Swagger UI /docs sayfasından aldığınız token'ı yapıştırın"
+                      rows={4}
+                    />
+                  </Form.Item>
+
+                  <Form.Item>
+                    <Button type="primary" size="large" htmlType="submit" block>
+                      Token ile Giriş Yap
+                    </Button>
+                  </Form.Item>
+
+                  <Typography.Text
+                    type="secondary"
+                    style={{ display: 'block', textAlign: 'center' }}
+                  >
+                    <small>
+                      Token'ı Swagger UI'dan (/docs) elde edebilirsiniz
+                    </small>
+                  </Typography.Text>
                 </Form>
               ),
             },

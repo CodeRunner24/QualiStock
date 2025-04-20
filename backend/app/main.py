@@ -7,6 +7,12 @@ from .controllers.category_controller import CategoryController
 from .controllers.product_controller import ProductController
 from .controllers.user_controller import UserController
 from .controllers.stock_item_controller import StockItemController
+import sys
+import os
+
+# Middleware dizinini Python yoluna ekle
+sys.path.append(os.path.join(os.path.dirname(os.path.dirname(__file__)), "middleware"))
+from cors import setup_cors
 
 # Veritabanı tabloları oluştur
 models.Base.metadata.create_all(bind=engine)
@@ -17,20 +23,8 @@ app = FastAPI(
     version="1.0.0"
 )
 
-# CORS ayarları
-origins = [
-    "http://localhost",
-    "http://localhost:3000",  # React uygulaması için
-    "http://localhost:5173",  # Vite geliştirme sunucusu için
-]
-
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=origins,
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+# CORS ayarlarını yeni middleware ile yap
+app = setup_cors(app)
 
 # Router'ları dahil et
 app.include_router(auth.router)

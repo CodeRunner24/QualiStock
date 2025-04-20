@@ -35,6 +35,8 @@ import {
   categoryService,
   productService,
   stockItemService,
+  authService,
+  setAuthToken,
 } from '../../services/api';
 
 const { Title, Text } = Typography;
@@ -160,18 +162,55 @@ export const StockManagement: React.FC = () => {
     }
   };
 
+  // Token kontrolü
+  const checkAndPromptForToken = () => {
+    const isAuthenticated = authService.isAuthenticated();
+
+    if (!isAuthenticated) {
+      const token = prompt(
+        'API token gerekli. Lütfen token giriniz (Swagger UI /docs sayfasından alabilirsiniz):'
+      );
+
+      if (token) {
+        if (setAuthToken(token)) {
+          message.success('Token başarıyla ayarlandı. Sayfa yenileniyor...');
+          setTimeout(() => {
+            window.location.reload();
+          }, 1000);
+          return true;
+        } else {
+          message.error('Geçersiz token formatı');
+          return false;
+        }
+      } else {
+        message.warning(
+          'Token gerekli. API istekleri yetkilendirilmemiş olarak çalışacak.'
+        );
+        return false;
+      }
+    }
+
+    return true;
+  };
+
   // Load data
   const loadData = async () => {
     setLoading(true);
     try {
+      // API istekleri için token kontrolü yap
+      checkAndPromptForToken();
+
+      console.log('Stock sayfası veri yükleme başladı');
       // Load categories
       let categoriesData = [];
       try {
+        console.log('Kategoriler yükleniyor...');
         categoriesData = await retryRequest(() => categoryService.getAll());
         console.log('Categories data loaded:', categoriesData);
         setCategories(categoriesData);
       } catch (categoryError) {
         console.error('Error loading categories:', categoryError);
+        // API hatası, ancak 401 hatası için özel işlem yapmıyoruz - API interceptor bunu hallediyor
         message.warning('Could not load categories. Using default categories.');
         // Fallback to predefined categories
         categoriesData = PREDEFINED_CATEGORIES.map((cat, index) => ({
@@ -185,10 +224,12 @@ export const StockManagement: React.FC = () => {
       // Load products
       let productsData = [];
       try {
+        console.log('Ürünler yükleniyor...');
         productsData = await retryRequest(() => productService.getAll());
         console.log('Products data loaded:', productsData);
       } catch (productError) {
         console.error('Error loading products:', productError);
+        // API hatası, ancak 401 hatası için özel işlem yapmıyoruz - API interceptor bunu hallediyor
         message.warning('Could not load products. Using sample data.');
         // Use mock product data
         productsData = [
@@ -218,6 +259,7 @@ export const StockManagement: React.FC = () => {
       // Load stock items
       let stockItemsData = [];
       try {
+        console.log('Stok öğeleri yükleniyor...');
         stockItemsData = await retryRequest(() => stockItemService.getAll());
         console.log('Stock items data loaded:', stockItemsData);
 
@@ -228,6 +270,7 @@ export const StockManagement: React.FC = () => {
         setLocations(uniqueLocations);
       } catch (stockError) {
         console.error('Error loading stock items:', stockError);
+        // API hatası, ancak 401 hatası için özel işlem yapmıyoruz - API interceptor bunu hallediyor
         message.warning('Could not load stock items. Using sample data.');
         // Use mock stock data
         stockItemsData = [
@@ -255,29 +298,90 @@ export const StockManagement: React.FC = () => {
 
       // Process the data
       try {
-        // Find product details for each stock item
-        const stockWithDetails = stockItemsData.map((stockItem: StockItem) => {
-          const product = productsData.find(
-            (p: Product) => p.id === stockItem.product_id
-          );
-          return {
-            ...stockItem,
-            product: product || {
-              name: 'Unknown Product',
-              sku: 'UNKNOWN',
-              unit_price: 0,
-              category_id: null,
-            },
-          };
-        });
-        setTableData(stockWithDetails);
+        // Tablo verilerini hazırlamak için 3 farklı yaklaşım deneyeceğiz
+        let formattedTableData = [];
+
+        // 1. Ürünlere dayalı bir tablo oluştur, içinde stok bilgileri de olsun
+        if (productsData.length > 0) {
+          console.log('Processing data based on products...');
+
+          // Tüm ürünler için tablo satırları oluştur, stok bilgisi olmasa bile
+          formattedTableData = productsData.map((product: Product) => {
+            // Bu ürün için tüm stok öğelerini bul
+            const productStockItems = stockItemsData.filter(
+              (item: StockItem) => item.product_id === product.id
+            );
+
+            // Bu ürün için toplam stok miktarını hesapla
+            const totalQuantity = productStockItems.reduce(
+              (sum: number, item: StockItem) => sum + (item.quantity || 0),
+              0
+            );
+
+            // İlk stok öğesi bilgilerini al (varsa)
+            const firstStockItem =
+              productStockItems.length > 0 ? productStockItems[0] : null;
+
+            // Bu ürünün kategorisini bul
+            const category = categoriesData.find(
+              (c: Category) => c.id === product.category_id
+            );
+
+            return {
+              key: `product-${product.id}`,
+              id: product.id,
+              name: product.name,
+              sku: product.sku,
+              category: category?.name || 'Uncategorized',
+              categoryId: product.category_id,
+              stock: totalQuantity,
+              location: firstStockItem?.location || 'Not in stock',
+              unitPrice: `$${product.unit_price.toFixed(2)}`,
+              stockItemId: firstStockItem?.id,
+            };
+          });
+        }
+        // 2. Stok öğelerine göre tablo oluştur, ürün bilgisi ekleyerek
+        else if (stockItemsData.length > 0) {
+          console.log('Processing data based on stock items...');
+
+          formattedTableData = stockItemsData.map((stockItem: StockItem) => {
+            const product = productsData.find(
+              (p: Product) => p.id === stockItem.product_id
+            );
+
+            const category =
+              product &&
+              categoriesData.find(
+                (c: Category) => c.id === product.category_id
+              );
+
+            return {
+              key: `stock-${stockItem.id}`,
+              id: product?.id || 0,
+              name: product?.name || 'Unknown Product',
+              sku: product?.sku || 'UNKNOWN',
+              category: category?.name || 'Uncategorized',
+              categoryId: product?.category_id || 0,
+              stock: stockItem.quantity || 0,
+              location: stockItem.location || 'Unknown',
+              unitPrice: product
+                ? `$${product.unit_price.toFixed(2)}`
+                : '$0.00',
+              stockItemId: stockItem.id,
+            };
+          });
+        }
+
+        console.log('Formatted table data:', formattedTableData);
+        setTableData(formattedTableData);
 
         // Calculate statistics
         let totalStockValue = 0;
         let totalStockCount = 0;
         const categoryData: Record<string, number> = {};
 
-        stockWithDetails.forEach(
+        formattedTableData.forEach(
           (item: {
             quantity: number;
             product?: { unit_price: number; category_id?: number | null };
@@ -313,7 +417,7 @@ export const StockManagement: React.FC = () => {
 
         setStats({
           totalProducts: productsData.length,
-          lowStockItems: stockWithDetails.filter(
+          lowStockItems: formattedTableData.filter(
             (item: { quantity: number }) => item.quantity < 10
           ).length,
           stockValue: totalStockValue,
@@ -342,16 +446,21 @@ export const StockManagement: React.FC = () => {
   // Prevent redirection
   useEffect(() => {
     const handleNavigation = (event: any) => {
-      // Prevent navigation events for specific conditions
-      if (window.location.pathname === '/stock' && !loading) {
+      // Sadece gerçek bir beforeunload event'i olduğunda çalış
+      if (
+        event.type === 'beforeunload' &&
+        window.location.pathname === '/stock'
+      ) {
+        // Kullanıcı sayfadan ayrılmaya çalışıyorsa, normal davranışı engelleme
+        // Ancak sayfayı değiştirme girişimleri için engelleme yapma
+        console.log('Sayfadan ayrılma önlendi');
         event.preventDefault();
-        event.stopPropagation();
-        console.log('Navigation prevented - staying on stock page');
+        event.returnValue = ''; // Bu, tarayıcının standart bir dialog göstermesini sağlar
         return false;
       }
     };
 
-    // Try to prevent unwanted redirects
+    // Tarayıcı yenileme veya sayfa değiştirme için event listener
     window.addEventListener('beforeunload', handleNavigation);
 
     return () => {
@@ -447,18 +556,35 @@ export const StockManagement: React.FC = () => {
         }
       }
 
+      // Kategori ID'sinin sayısal değer olduğundan emin olalım
+      const numericCategoryId = Number(categoryId);
+
+      if (isNaN(numericCategoryId)) {
+        message.error('Invalid category ID. Please select a valid category.');
+        setLoading(false);
+        return;
+      }
+
       const productData = {
         name: values.name,
         sku: values.sku,
         description: values.description || '',
-        category_id: categoryId,
-        unit_price: values.unit_price,
+        category_id: numericCategoryId,
+        unit_price: Number(values.unit_price),
       };
 
+      console.log('Sending product data to API:', productData);
+
       const response = await productService.create(productData);
-      setNewProductId(response.id);
-      message.success('Product created successfully!');
-      setCurrentStep(1); // Move to stock addition step
+      console.log('Product creation response:', response);
+
+      if (response && response.id) {
+        setNewProductId(response.id);
+        message.success('Product created successfully!');
+        setCurrentStep(1); // Move to stock addition step
+      } else {
+        throw new Error('Invalid response format');
+      }
     } catch (error) {
       console.error('Error creating product:', error);
       message.error('An error occurred while creating the product.');
@@ -476,6 +602,7 @@ export const StockManagement: React.FC = () => {
 
     try {
       setLoading(true);
+      console.log('Creating stock item...');
 
       // Eğer kullanıcı "Add New Location" seçtiyse
       let location = values.location;
@@ -483,9 +610,10 @@ export const StockManagement: React.FC = () => {
         location = values.newLocation;
       }
 
+      // Gerekli verilerin doğru formatta olduğundan emin ol
       const stockData = {
-        product_id: newProductId,
-        quantity: values.quantity,
+        product_id: Number(newProductId),
+        quantity: Number(values.quantity),
         location: location,
         batch_number: values.batch_number,
         manufacturing_date: values.manufacturing_date
@@ -496,13 +624,38 @@ export const StockManagement: React.FC = () => {
           : undefined,
       };
 
-      await stockItemService.create(stockData);
+      console.log('Sending stock item data to API:', stockData);
+
+      // Token kontrolü ve CORS sorunu için baştan token kontrolü yap
+      if (!authService.isAuthenticated()) {
+        message.warning('Authentication token required. Please log in again.');
+        setLoading(false);
+        return;
+      }
+
+      const response = await stockItemService.create(stockData);
+      console.log('Stock item created successfully:', response);
+
       message.success('Stock item added successfully!');
       handleCancel(); // Close modal
-      loadData(); // Refresh data
-    } catch (error) {
+
+      // Verileri yeniden yükle, yeni eklenen stok öğesini görmek için
+      // Biraz gecikme ekleyerek backend'in güncellemesine izin ver
+      setTimeout(() => {
+        loadData();
+      }, 500);
+    } catch (error: any) {
       console.error('Error adding stock:', error);
-      message.error('An error occurred while adding the stock item.');
+
+      // CORS hatası için özel mesaj göster
+      if (error.toString().includes('CORS')) {
+        message.error(
+          'CORS error: Backend server might be unavailable or misconfigured.'
+        );
+      } else {
+        // Genel hata mesajı
+        message.error('An error occurred while adding the stock item.');
+      }
     } finally {
       setLoading(false);
     }
