@@ -1,12 +1,14 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from .database import engine
-from . import models
+from .models import Base
 from .routers import auth, dashboard, quality, expiration, forecasting
 from .controllers.category_controller import CategoryController
 from .controllers.product_controller import ProductController
 from .controllers.user_controller import UserController
 from .controllers.stock_item_controller import StockItemController
+from .controllers.quality_check_controller import QualityCheckController
+from .controllers.forecast_controller import ForecastController
 import sys
 import os
 
@@ -15,7 +17,7 @@ sys.path.append(os.path.join(os.path.dirname(os.path.dirname(__file__)), "middle
 from cors import setup_cors
 
 # Veritabanı tabloları oluştur
-models.Base.metadata.create_all(bind=engine)
+Base.metadata.create_all(bind=engine)
 
 app = FastAPI(
     title="QualiStock API",
@@ -26,14 +28,14 @@ app = FastAPI(
 # CORS ayarlarını yeni middleware ile yap
 app = setup_cors(app)
 
-# Router'ları dahil et
+# Eski router'ları dahil et (zamanla tamamen kaldırılabilir)
 app.include_router(auth.router)
 app.include_router(dashboard.router)
 app.include_router(quality.router)
 app.include_router(expiration.router)
 app.include_router(forecasting.router)
 
-# Yeni mimari için controller'ları dahil et
+# Katmanlı mimariye uygun controller'ları dahil et
 category_controller = CategoryController()
 app.include_router(category_controller.router)
 
@@ -46,6 +48,12 @@ app.include_router(user_controller.router)
 stock_item_controller = StockItemController()
 app.include_router(stock_item_controller.router)
 
+quality_check_controller = QualityCheckController()
+app.include_router(quality_check_controller.router)
+
+forecast_controller = ForecastController()
+app.include_router(forecast_controller.router)
+
 @app.get("/")
 async def root():
     return {"message": "QualiStock API'ye Hoş Geldiniz! /docs URL'sine giderek API dokümanını görüntüleyebilirsiniz."}
@@ -54,20 +62,21 @@ async def root():
 @app.post("/init-test-data", tags=["admin"])
 async def init_test_data():
     from sqlalchemy.orm import Session
-    from . import models, auth
+    from .models import User, Category, Product, StockItem, QualityCheck, QualityStatus, Forecast
     from .database import SessionLocal
+    from .auth import get_password_hash
     from datetime import datetime, timedelta
     import random
 
     db = SessionLocal()
     try:
         # Test verileri oluşturuldu mu kontrol et
-        if db.query(models.User).count() > 0:
+        if db.query(User).count() > 0:
             return {"message": "Test verileri zaten oluşturulmuş"}
         
         # Test kullanıcısı oluştur
-        hashed_password = auth.get_password_hash("password")
-        admin_user = models.User(
+        hashed_password = get_password_hash("password")
+        admin_user = User(
             username="admin",
             email="admin@example.com",
             hashed_password=hashed_password,
@@ -80,21 +89,21 @@ async def init_test_data():
         
         # Kategori oluştur
         categories = [
-            models.Category(name="Gıda", description="Yiyecek ve içecek ürünleri"),
-            models.Category(name="Elektronik", description="Elektronik cihazlar ve aksesuarlar"),
-            models.Category(name="Giyim", description="Kıyafet ve ayakkabılar"),
+            Category(name="Gıda", description="Yiyecek ve içecek ürünleri"),
+            Category(name="Elektronik", description="Elektronik cihazlar ve aksesuarlar"),
+            Category(name="Giyim", description="Kıyafet ve ayakkabılar"),
         ]
         db.add_all(categories)
         db.commit()
         
         # Ürünler oluştur
         products = [
-            models.Product(name="Elma", sku="FOOD001", category_id=1, unit_price=5.99),
-            models.Product(name="Portakal", sku="FOOD002", category_id=1, unit_price=6.99),
-            models.Product(name="Laptop", sku="ELEC001", category_id=2, unit_price=1299.99),
-            models.Product(name="Akıllı Telefon", sku="ELEC002", category_id=2, unit_price=999.99),
-            models.Product(name="T-Shirt", sku="CLOTH001", category_id=3, unit_price=19.99),
-            models.Product(name="Kot Pantolon", sku="CLOTH002", category_id=3, unit_price=49.99),
+            Product(name="Elma", sku="FOOD001", category_id=1, unit_price=5.99),
+            Product(name="Portakal", sku="FOOD002", category_id=1, unit_price=6.99),
+            Product(name="Laptop", sku="ELEC001", category_id=2, unit_price=1299.99),
+            Product(name="Akıllı Telefon", sku="ELEC002", category_id=2, unit_price=999.99),
+            Product(name="T-Shirt", sku="CLOTH001", category_id=3, unit_price=19.99),
+            Product(name="Kot Pantolon", sku="CLOTH002", category_id=3, unit_price=49.99),
         ]
         db.add_all(products)
         db.commit()
@@ -111,7 +120,7 @@ async def init_test_data():
                 if product.category_id == 1:  # Gıda ürünleri için son kullanma tarihi
                     expiration_days = random.randint(10, 90)
                 
-                stock_items.append(models.StockItem(
+                stock_items.append(StockItem(
                     product_id=product.id,
                     quantity=random.randint(5, 100),
                     location=random.choice(locations),
@@ -125,11 +134,11 @@ async def init_test_data():
         
         # Kalite kontrolleri oluştur
         quality_checks = []
-        statuses = list(models.QualityStatus)
+        statuses = list(QualityStatus)
         
         for i, product in enumerate(products):
             status = random.choice(statuses)
-            quality_checks.append(models.QualityCheck(
+            quality_checks.append(QualityCheck(
                 product_id=product.id,
                 batch_number=f"BATCH{i+1}1",  # İlk parti
                 status=status,
@@ -144,7 +153,7 @@ async def init_test_data():
         forecasts = []
         for product in products:
             for i in range(1, 4):  # Her ürün için 3 farklı tahmin
-                forecasts.append(models.Forecast(
+                forecasts.append(Forecast(
                     product_id=product.id,
                     forecast_date=now + timedelta(days=30*i),
                     predicted_demand=random.randint(20, 50),

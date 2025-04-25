@@ -15,14 +15,14 @@ class StockItemService:
     def create_stock_item(self, db: Session, stock_item: StockItemCreate) -> StockItem:
         """Yeni stok öğesi oluşturur"""
         # Ürünün var olup olmadığını kontrol et
-        product = self.product_repository.get(db, stock_item.product_id)
+        product = self.product_repository.get_by_id(db, stock_item.product_id)
         if not product:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail=f"Product with id {stock_item.product_id} not found"
             )
         
-        return self.repository.create(db, obj_in=stock_item)
+        return self.repository.create(db, stock_item.dict())
     
     def get_stock_items(
         self, 
@@ -48,7 +48,7 @@ class StockItemService:
     
     def get_stock_item(self, db: Session, stock_item_id: int) -> StockItem:
         """ID'ye göre stok öğesi döndürür"""
-        stock_item = self.repository.get(db, stock_item_id)
+        stock_item = self.repository.get_by_id(db, stock_item_id)
         if not stock_item:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
@@ -62,19 +62,19 @@ class StockItemService:
         
         # Eğer ürün ID'si değiştiriliyorsa, yeni ürünün var olup olmadığını kontrol et
         if stock_item.product_id != db_stock_item.product_id:
-            product = self.product_repository.get(db, stock_item.product_id)
+            product = self.product_repository.get_by_id(db, stock_item.product_id)
             if not product:
                 raise HTTPException(
                     status_code=status.HTTP_404_NOT_FOUND,
                     detail=f"Product with id {stock_item.product_id} not found"
                 )
         
-        return self.repository.update(db, db_obj=db_stock_item, obj_in=stock_item)
+        return self.repository.update(db, stock_item_id, stock_item.dict())
     
     def delete_stock_item(self, db: Session, stock_item_id: int) -> None:
         """Stok öğesini siler"""
         db_stock_item = self.get_stock_item(db, stock_item_id)
-        self.repository.delete(db, id=stock_item_id)
+        self.repository.delete(db, stock_item_id)
     
     def get_expiring_soon_count(self, db: Session, days: int = 30) -> int:
         """Yakında sona erecek stok öğelerinin sayısını döndürür"""

@@ -475,3 +475,38 @@ export const stockItemService = {
     }
   },
 };
+
+// Expiration Service
+export const expirationService = {
+  getExpiringItems: async (
+    params: { days?: number; category_id?: number; product_id?: number } = {}
+  ) => {
+    try {
+      const response = await api.get('/expiration/items/', { params });
+      return response.data;
+    } catch (error) {
+      console.error('Get expiring items error:', error);
+      throw error;
+    }
+  },
+
+  getStats: async () => {
+    try {
+      const response = await api.get('/expiration/stats');
+      return response.data;
+    } catch (error) {
+      console.error('Get expiration stats error:', error);
+      throw error;
+    }
+  },
+
+  getCriticalItems: async () => {
+    try {
+      const response = await api.get('/expiration/critical');
+      return response.data;
+    } catch (error) {
+      console.error('Get critical expiring items error:', error);
+      throw error;
+    }
+  },
+};

@@ -7,7 +7,7 @@ from ..models import StockItem
 from ..schemas import StockItemCreate, StockItemUpdate
 from .base_repository import BaseRepository
 
-class StockItemRepository(BaseRepository[StockItem, StockItemCreate, StockItemUpdate]):
+class StockItemRepository(BaseRepository[StockItem]):
     def __init__(self):
         super().__init__(StockItem)
     

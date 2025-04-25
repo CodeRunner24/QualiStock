@@ -20,7 +20,7 @@ class CategoryService:
                 detail=f"Category with name '{category.name}' already exists"
             )
         
-        return self.repository.create(db, obj_in=category)
+        return self.repository.create(db, category.dict())
     
     def get_categories(
         self, 
@@ -38,7 +38,7 @@ class CategoryService:
     
     def get_category(self, db: Session, category_id: int) -> Category:
         """ID'ye göre kategori döndürür"""
-        category = self.repository.get(db, category_id)
+        category = self.repository.get_by_id(db, category_id)
         if not category:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
@@ -59,21 +59,21 @@ class CategoryService:
                     detail=f"Category with name '{category.name}' already exists"
                 )
         
-        return self.repository.update(db, db_obj=db_category, obj_in=category)
+        return self.repository.update(db, category_id, category.dict())
     
     def delete_category(self, db: Session, category_id: int) -> None:
         """Kategoriyi siler"""
         db_category = self.get_category(db, category_id)
         
-        # Kategoriye bağlı ürünler var mı kontrol et
-        products_count = self.repository.count_products(db, category_id)
-        if products_count > 0:
+        # Kategoriye bağlı ürünleri kontrol et
+        product_count = self.repository.count_products(db, category_id)
+        if product_count > 0:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Cannot delete category that has {products_count} products. Remove products first."
+                detail=f"Cannot delete category that has {product_count} products. Move or delete products first."
             )
         
-        self.repository.delete(db, id=category_id)
+        self.repository.delete(db, category_id)
     
     def get_category_products(
         self, 

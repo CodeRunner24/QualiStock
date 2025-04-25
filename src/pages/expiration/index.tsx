@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Typography,
   Card,
@@ -11,6 +11,7 @@ import {
   Select,
   Alert,
   Dropdown,
+  message,
 } from 'antd';
 import {
   ClockCircleOutlined,
@@ -18,7 +19,9 @@ import {
   FilterOutlined,
   InboxOutlined,
   ExclamationCircleOutlined,
+  ReloadOutlined,
 } from '@ant-design/icons';
+import { expirationService } from '../../services/api';
 
 const { Title, Text } = Typography;
 const { Option } = Select;
@@ -39,28 +42,144 @@ const BoxIcon: React.FC<React.SVGProps<SVGSVGElement>> = (props) => (
 );
 
 export const ExpirationTracking: React.FC = () => {
-  // Stats data
-  const statsData = [
+  // State tanımlamaları
+  const [statsData, setStatsData] = useState([
     {
       title: 'Total Expiring Items',
-      value: 105,
+      value: 0,
       icon: <BoxIcon style={{ color: '#1890ff', fontSize: 24 }} />,
     },
     {
-      title: 'Critical (< 48 hours)',
-      value: 36,
+      title: 'Critical (< 7 days)',
+      value: 0,
       icon: <ClockCircleOutlined style={{ color: '#ff4d4f', fontSize: 24 }} />,
     },
     {
       title: 'This Week',
-      value: 69,
+      value: 0,
       icon: <CalendarOutlined style={{ color: '#52c41a', fontSize: 24 }} />,
     },
-  ];
+  ]);
 
-  // Filter states
+  const [loading, setLoading] = useState(false);
   const [timeFilter, setTimeFilter] = useState('This Week');
   const [categoryFilter, setCategoryFilter] = useState('All Categories');
+  const [expiringItems, setExpiringItems] = useState([]);
+  const [criticalCount, setCriticalCount] = useState(0);
+  const [categories, setCategories] = useState<string[]>([
+    'All Categories',
+    'Dairy',
+    'Produce',
+    'Bakery',
+    'Meat',
+  ]);
+
+  // Verileri yükle
+  const loadData = async () => {
+    try {
+      setLoading(true);
+
+      // İstatistikleri al
+      const stats = await expirationService.getStats();
+
+      // Kritik öğeleri al
+      const criticalItems = await expirationService.getCriticalItems();
+
+      // Filtreye göre sona eren öğeleri al
+      let daysParam = 30; // default
+      if (timeFilter === 'Today') daysParam = 1;
+      if (timeFilter === 'This Week') daysParam = 7;
+      if (timeFilter === 'This Month') daysParam = 30;
+
+      const params: any = { days: daysParam };
+      if (categoryFilter !== 'All Categories') {
+        // Kategori ID'sini bulmak için daha fazla işlem gerekebilir
+        const categoryId = getCategoryIdByName(categoryFilter);
+        if (categoryId) params.category_id = categoryId;
+      }
+
+      const items = await expirationService.getExpiringItems(params);
+
+      // İstatistikleri güncelle
+      setStatsData([
+        {
+          title: 'Total Expiring Items',
+          value: stats.total_expiring || 0,
+          icon: <BoxIcon style={{ color: '#1890ff', fontSize: 24 }} />,
+        },
+        {
+          title: 'Critical (< 7 days)',
+          value: stats.critical_expiring || 0,
+          icon: (
+            <ClockCircleOutlined style={{ color: '#ff4d4f', fontSize: 24 }} />
+          ),
+        },
+        {
+          title: 'This Week',
+          value: stats.this_week_expiring || 0,
+          icon: <CalendarOutlined style={{ color: '#52c41a', fontSize: 24 }} />,
+        },
+      ]);
+
+      // Kategorileri düzenle
+      if (criticalItems && criticalItems.length > 0) {
+        const uniqueCategories = [
+          ...new Set(criticalItems.map((item) => item.category)),
+        ];
+        setCategories(['All Categories', ...uniqueCategories]);
+      }
+
+      // Kritik öğe sayısını belirle
+      setCriticalCount(criticalItems ? criticalItems.length : 0);
+
+      // Tabloya eklenecek verileri formatla
+      const formattedItems = formatExpiringItems(items || []);
+      setExpiringItems(formattedItems);
+    } catch (error) {
+      console.error('Failed to load expiration data:', error);
+      message.error('Verileri yüklerken bir hata oluştu');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Sayfa yüklendiğinde verileri çek
+  useEffect(() => {
+    loadData();
+  }, []);
+
+  // Filtre değiştiğinde verileri güncelle
+  useEffect(() => {
+    loadData();
+  }, [timeFilter, categoryFilter]);
+
+  // Yardımcı fonksiyonlar
+  const getCategoryIdByName = (name: string) => {
+    // Bu işlev backend'den kategori ID'sini almak için implemente edilmeli
+    // Şimdilik null döndürüyoruz
+    return null;
+  };
+
+  const formatExpiringItems = (items: any[]) => {
+    const now = new Date();
+
+    return items.map((item, index) => {
+      const expirationDate = new Date(item.expiration_date);
+      const daysLeft = Math.ceil(
+        (expirationDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24)
+      );
+
+      return {
+        key: item.id || index.toString(),
+        name: item.product?.name || 'Unnamed Product',
+        category: item.product?.category?.name || 'Uncategorized',
+        quantity: item.quantity || 0,
+        location: item.location || 'Unknown',
+        expirationDate: expirationDate.toLocaleDateString(),
+        status: `${daysLeft} days left`,
+      };
+    });
+  };
 
   // Table columns
   const columns = [
@@ -95,11 +214,19 @@ export const ExpirationTracking: React.FC = () => {
       key: 'status',
       render: (text: string) => {
         let color = 'green';
-        if (text.includes('2 days')) {
+        if (
+          text.includes('2 days') ||
+          text.includes('1 days') ||
+          text.includes('0 days')
+        ) {
           color = 'red';
-        } else if (text.includes('3 days')) {
+        } else if (text.includes('3 days') || text.includes('4 days')) {
           color = 'orange';
-        } else if (text.includes('5 days')) {
+        } else if (
+          text.includes('5 days') ||
+          text.includes('6 days') ||
+          text.includes('7 days')
+        ) {
           color = 'gold';
         }
         return <Tag color={color}>{text}</Tag>;
@@ -107,40 +234,22 @@ export const ExpirationTracking: React.FC = () => {
     },
   ];
 
-  // Table data
-  const data = [
-    {
-      key: '1',
-      name: 'Organic Milk',
-      category: 'Dairy',
-      quantity: 24,
-      location: 'Cold Storage A',
-      expirationDate: '2024-11-25',
-      status: '5 days left',
-    },
-    {
-      key: '2',
-      name: 'Fresh Vegetables',
-      category: 'Produce',
-      quantity: 45,
-      location: 'Section B2',
-      expirationDate: '2024-11-23',
-      status: '3 days left',
-    },
-    {
-      key: '3',
-      name: 'Yogurt Cups',
-      category: 'Dairy',
-      quantity: 36,
-      location: 'Cold Storage B',
-      expirationDate: '2024-11-22',
-      status: '2 days left',
-    },
-  ];
-
   return (
     <div style={{ padding: 24 }}>
-      <Title level={2}>Expiration Tracking</Title>
+      <Row gutter={16} align="middle" style={{ marginBottom: 16 }}>
+        <Col flex="auto">
+          <Title level={2}>Expiration Tracking</Title>
+        </Col>
+        <Col>
+          <Button
+            icon={<ReloadOutlined />}
+            onClick={loadData}
+            loading={loading}
+          >
+            Refresh
+          </Button>
+        </Col>
+      </Row>
 
       {/* Stats Cards */}
       <Row gutter={[16, 16]} style={{ marginBottom: 24 }}>
@@ -185,24 +294,26 @@ export const ExpirationTracking: React.FC = () => {
             style={{ width: 150 }}
             onChange={(value) => setCategoryFilter(value)}
           >
-            <Option value="All Categories">All Categories</Option>
-            <Option value="Dairy">Dairy</Option>
-            <Option value="Produce">Produce</Option>
-            <Option value="Bakery">Bakery</Option>
-            <Option value="Meat">Meat</Option>
+            {categories.map((category) => (
+              <Option key={category} value={category}>
+                {category}
+              </Option>
+            ))}
           </Select>
         </div>
       </div>
 
       {/* Alert for critical items */}
-      <Alert
-        message="Critical Expiration Alert"
-        description="36 items will expire within 48 hours. Immediate action required."
-        type="error"
-        icon={<ExclamationCircleOutlined />}
-        showIcon
-        style={{ marginBottom: 16 }}
-      />
+      {criticalCount > 0 && (
+        <Alert
+          message="Critical Expiration Alert"
+          description={`${criticalCount} items will expire within 7 days. Immediate action required.`}
+          type="error"
+          icon={<ExclamationCircleOutlined />}
+          showIcon
+          style={{ marginBottom: 16 }}
+        />
+      )}
 
       {/* Expiring Items Table */}
       <Card
@@ -213,9 +324,10 @@ export const ExpirationTracking: React.FC = () => {
       >
         <Table
           columns={columns}
-          dataSource={data}
-          pagination={false}
+          dataSource={expiringItems}
+          pagination={{ pageSize: 10 }}
           className="custom-table"
+          loading={loading}
         />
       </Card>
     </div>

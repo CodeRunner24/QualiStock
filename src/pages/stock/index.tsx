@@ -643,6 +643,25 @@ export const StockManagement: React.FC = () => {
       // Biraz gecikme ekleyerek backend'in güncellemesine izin ver
       setTimeout(() => {
         loadData();
+
+        // Son kullanma tarihi varsa ve yönlendirme yapmak istiyorsak
+        if (values.expiration_date) {
+          message.info(
+            'Son kullanma tarihli ürün eklendi. Expiration sayfasında görüntülenebilir.'
+          );
+
+          // Kullanıcıyı expiration sayfasına yönlendirmek için bir buton göster
+          Modal.confirm({
+            title: 'Expiration Takip',
+            content:
+              'Son kullanma tarihli yeni ürün eklendi. Expiration sayfasına gitmek ister misiniz?',
+            okText: 'Evet, Git',
+            cancelText: 'Hayır',
+            onOk: () => {
+              window.location.href = '/expiration';
+            },
+          });
+        }
       }, 500);
     } catch (error: any) {
       console.error('Error adding stock:', error);

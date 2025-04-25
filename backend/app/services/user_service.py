@@ -1,12 +1,12 @@
-from typing import List, Optional
+from typing import List, Optional, Dict, Any
 import logging
-from fastapi import HTTPException, status
+from fastapi import HTTPException, status, Depends
 from sqlalchemy.orm import Session
 
 from ..repositories.user_repository import UserRepository
 from ..models import User
-from ..schemas import UserCreate, UserUpdate
-from ..auth import get_password_hash, verify_password
+from ..schemas import UserCreate, UserUpdate, User as UserSchema
+from ..auth import get_password_hash, verify_password, create_access_token
 
 # Loglama yapılandırması
 logger = logging.getLogger("app.services.user_service")
@@ -67,7 +67,7 @@ class UserService:
             )
     
     def get_users(self, db: Session, skip: int = 0, limit: int = 100) -> List[User]:
-        """Kullanıcıları listeler"""
+        """Tüm kullanıcıları listeler"""
         logger.info(f"Tüm kullanıcılar listeleniyor: skip={skip}, limit={limit}")
         try:
             users = self.repository.get_all(db, skip=skip, limit=limit)
@@ -80,11 +80,11 @@ class UserService:
                 detail="Kullanıcılar listelenirken bir hata oluştu"
             )
     
-    def get_user(self, db: Session, user_id: int) -> User:
-        """ID'ye göre kullanıcı döndürür"""
+    def get_user(self, db: Session, user_id: int) -> Optional[User]:
+        """ID'ye göre kullanıcı getirir"""
         logger.info(f"Kullanıcı bilgileri istendi: ID={user_id}")
         try:
-            user = self.repository.get(db, user_id)
+            user = self.repository.get_by_id(db, user_id)
             if not user:
                 logger.warning(f"Kullanıcı bulunamadı: ID={user_id}")
                 raise HTTPException(
@@ -103,7 +103,7 @@ class UserService:
             )
     
     def get_user_by_username(self, db: Session, username: str) -> Optional[User]:
-        """Kullanıcı adına göre kullanıcı döndürür"""
+        """Kullanıcı adına göre kullanıcı getirir"""
         logger.debug(f"Kullanıcı adına göre arama: {username}")
         try:
             return self.repository.get_by_username(db, username)
@@ -115,7 +115,7 @@ class UserService:
             )
     
     def get_user_by_email(self, db: Session, email: str) -> Optional[User]:
-        """E-posta adresine göre kullanıcı döndürür"""
+        """E-posta adresine göre kullanıcı getirir"""
         logger.debug(f"E-posta adresine göre arama: {email}")
         try:
             return self.repository.get_by_email(db, email)
@@ -127,7 +127,7 @@ class UserService:
             )
     
     def update_user(self, db: Session, user_id: int, user: UserUpdate) -> User:
-        """Kullanıcıyı günceller"""
+        """Kullanıcı bilgilerini günceller"""
         logger.info(f"Kullanıcı güncelleme isteği: ID={user_id}, username={user.username}, email={user.email}")
         try:
             db_user = self.get_user(db, user_id)
@@ -200,7 +200,7 @@ class UserService:
             )
     
     def authenticate_user(self, db: Session, username: str, password: str) -> Optional[User]:
-        """Kullanıcı doğrulama"""
+        """Kullanıcı kimlik doğrulaması yapar"""
         logger.info(f"Kullanıcı doğrulama girişimi: {username}")
         try:
             user = self.get_user_by_username(db, username)
@@ -216,4 +216,15 @@ class UserService:
             return user
         except Exception as e:
             logger.error(f"Kullanıcı doğrulama sırasında hata: {username}, error={str(e)}", exc_info=True)
-            return None 
+            return None
+    
+    def create_token_for_user(self, user: User) -> Dict[str, Any]:
+        """Kullanıcı için JWT token oluşturur"""
+        token_data = {
+            "sub": user.username,
+            "email": user.email,
+            "is_admin": user.is_admin
+        }
+        
+        access_token = create_access_token(data=token_data)
+        return {"access_token": access_token, "token_type": "bearer"} 

@@ -6,7 +6,7 @@ from ..models import Product, StockItem
 from ..schemas import ProductCreate, ProductUpdate
 from .base_repository import BaseRepository
 
-class ProductRepository(BaseRepository[Product, ProductCreate, ProductUpdate]):
+class ProductRepository(BaseRepository[Product]):
     def __init__(self):
         super().__init__(Product)
         

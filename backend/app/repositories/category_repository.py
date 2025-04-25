@@ -6,7 +6,7 @@ from ..models import Category, Product
 from ..schemas import CategoryCreate, CategoryUpdate
 from .base_repository import BaseRepository
 
-class CategoryRepository(BaseRepository[Category, CategoryCreate, CategoryUpdate]):
+class CategoryRepository(BaseRepository[Category]):
     def __init__(self):
         super().__init__(Category)
         

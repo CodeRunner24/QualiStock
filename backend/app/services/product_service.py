@@ -15,7 +15,7 @@ class ProductService:
     def create_product(self, db: Session, product: ProductCreate) -> Product:
         """Yeni ürün oluşturur"""
         # Kategorinin var olup olmadığını kontrol et
-        category = self.category_repository.get(db, product.category_id)
+        category = self.category_repository.get_by_id(db, product.category_id)
         if not category:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
@@ -30,7 +30,7 @@ class ProductService:
                 detail=f"Product with SKU '{product.sku}' already exists"
             )
         
-        return self.repository.create(db, obj_in=product)
+        return self.repository.create(db, product.dict())
     
     def get_products(
         self, 
@@ -61,7 +61,7 @@ class ProductService:
     
     def get_product(self, db: Session, product_id: int) -> Product:
         """ID'ye göre ürün döndürür"""
-        product = self.repository.get(db, product_id)
+        product = self.repository.get_by_id(db, product_id)
         if not product:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
@@ -75,7 +75,7 @@ class ProductService:
         
         # Kategorinin var olup olmadığını kontrol et
         if product.category_id != db_product.category_id:
-            category = self.category_repository.get(db, product.category_id)
+            category = self.category_repository.get_by_id(db, product.category_id)
             if not category:
                 raise HTTPException(
                     status_code=status.HTTP_404_NOT_FOUND,
@@ -91,7 +91,7 @@ class ProductService:
                     detail=f"Product with SKU '{product.sku}' already exists"
                 )
         
-        return self.repository.update(db, db_obj=db_product, obj_in=product)
+        return self.repository.update(db, product_id, product.dict())
     
     def delete_product(self, db: Session, product_id: int) -> None:
         """Ürünü siler"""
@@ -105,7 +105,7 @@ class ProductService:
                 detail=f"Cannot delete product that has {len(stock_items)} stock items. Remove stock items first."
             )
         
-        self.repository.delete(db, id=product_id)
+        self.repository.delete(db, product_id)
     
     def get_product_stock_items(
         self, 
