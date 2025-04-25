@@ -13,7 +13,7 @@ router = APIRouter(
     responses={404: {"description": "Not found"}},
 )
 
-@router.get("/items/", response_model=List[schemas.StockItem])
+@router.get("/items/", response_model=List[dict])
 async def get_expiring_items(
     skip: int = 0, 
     limit: int = 100, 
@@ -31,8 +31,27 @@ async def get_expiring_items(
     # Belirtilen gün sayısı kadar ileri tarih
     end_date = now + timedelta(days=days)
     
-    # Sorgu oluştur
-    query = db.query(models.StockItem).filter(
+    # Son kullanma tarihi yaklaşan stok öğelerini ve ilişkili ürünleri al
+    items = db.query(
+        models.StockItem.id.label("stock_item_id"),
+        models.StockItem.product_id,
+        models.StockItem.batch_number,
+        models.StockItem.quantity,
+        models.StockItem.location,
+        models.StockItem.expiration_date,
+        models.StockItem.manufacturing_date,
+        models.StockItem.created_at,
+        models.Product.id.label("product_id"),
+        models.Product.name.label("product_name"),
+        models.Product.sku,
+        models.Product.unit_price,
+        models.Category.id.label("category_id"),
+        models.Category.name.label("category_name")
+    ).join(
+        models.Product, models.StockItem.product_id == models.Product.id
+    ).join(
+        models.Category, models.Product.category_id == models.Category.id
+    ).filter(
         models.StockItem.expiration_date.isnot(None),
         models.StockItem.expiration_date >= now,
         models.StockItem.expiration_date <= end_date
@@ -40,19 +59,42 @@ async def get_expiring_items(
     
     # Kategori filtresi
     if category_id:
-        query = query.join(models.Product).filter(models.Product.category_id == category_id)
+        items = items.filter(models.Product.category_id == category_id)
     
     # Ürün filtresi
     if product_id:
-        query = query.filter(models.StockItem.product_id == product_id)
+        items = items.filter(models.StockItem.product_id == product_id)
     
     # Son kullanma tarihine göre sırala (yakın olan önce)
-    query = query.order_by(models.StockItem.expiration_date)
+    items = items.order_by(models.StockItem.expiration_date)
     
     # Sayfalama uygula
-    items = query.offset(skip).limit(limit).all()
+    items = items.offset(skip).limit(limit).all()
     
-    return items
+    # Kalan gün sayısını ve ek bilgileri ekleyerek sonucu formatla
+    result = []
+    for item in items:
+        # Kalan gün sayısını hesapla
+        days_remaining = (item.expiration_date - now).days
+        
+        result.append({
+            "id": item.stock_item_id,
+            "product_id": item.product_id,
+            "product_name": item.product_name,
+            "sku": item.sku,
+            "category_id": item.category_id,
+            "category": item.category_name,
+            "batch_number": item.batch_number,
+            "quantity": item.quantity,
+            "location": item.location,
+            "unit_price": item.unit_price,
+            "expiration_date": item.expiration_date,
+            "manufacturing_date": item.manufacturing_date,
+            "created_at": item.created_at,
+            "days_remaining": days_remaining
+        })
+    
+    return result
 
 @router.get("/stats", response_model=dict)
 async def get_expiration_stats(db: Session = Depends(get_db)):

@@ -650,6 +650,28 @@ export const StockManagement: React.FC = () => {
             'Son kullanma tarihli ürün eklendi. Expiration sayfasında görüntülenebilir.'
           );
 
+          // Expiration sayfasını önceden açıksa yenilenmesi için event gönder
+          try {
+            // CustomEvent kullarak sayfalar arası iletişim kur
+            const expirationUpdateEvent = new CustomEvent(
+              'expiration_data_updated',
+              {
+                detail: {
+                  source: 'stock_management',
+                  timestamp: new Date().toISOString(),
+                  hasExpirationDate: true,
+                },
+              }
+            );
+            window.dispatchEvent(expirationUpdateEvent);
+            console.log('Expiration güncelleme olayı tetiklendi');
+          } catch (eventError) {
+            console.error(
+              'Expiration güncelleme olayı gönderilemedi:',
+              eventError
+            );
+          }
+
           // Kullanıcıyı expiration sayfasına yönlendirmek için bir buton göster
           Modal.confirm({
             title: 'Expiration Takip',
