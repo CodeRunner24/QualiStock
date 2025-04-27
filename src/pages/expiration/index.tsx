@@ -41,6 +41,40 @@ const BoxIcon: React.FC<React.SVGProps<SVGSVGElement>> = (props) => (
   </span>
 );
 
+// Interface tanımlamaları ekleyelim
+interface ExpirationStat {
+  total_expiring?: number;
+  critical_expiring?: number;
+  this_week_expiring?: number;
+}
+
+interface ExpirationItem {
+  id?: number;
+  stock_item_id?: number;
+  product_name?: string;
+  category?: string;
+  quantity?: number;
+  location?: string;
+  expiration_date?: string;
+  product?: {
+    name?: string;
+    category?: {
+      name?: string;
+    };
+  };
+}
+
+// ExpiringItem için bir arayüz tanımlayalım
+interface ExpiringItem {
+  key: string;
+  name: string;
+  category: string;
+  quantity: number;
+  location: string;
+  expirationDate: string;
+  status: string;
+}
+
 export const ExpirationTracking: React.FC = () => {
   // State tanımlamaları
   const [statsData, setStatsData] = useState([
@@ -64,7 +98,7 @@ export const ExpirationTracking: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [timeFilter, setTimeFilter] = useState('This Week');
   const [categoryFilter, setCategoryFilter] = useState('All Categories');
-  const [expiringItems, setExpiringItems] = useState([]);
+  const [expiringItems, setExpiringItems] = useState<ExpiringItem[]>([]);
   const [criticalCount, setCriticalCount] = useState(0);
   const [categories, setCategories] = useState<string[]>([
     'All Categories',
@@ -82,7 +116,7 @@ export const ExpirationTracking: React.FC = () => {
 
       // İstatistikleri al
       try {
-        const stats = await expirationService.getStats();
+        const stats: ExpirationStat = await expirationService.getStats();
         console.log('Expiration stats yüklendi:', stats);
 
         // İstatistikleri güncelle
@@ -112,7 +146,7 @@ export const ExpirationTracking: React.FC = () => {
       }
 
       // Kritik öğeleri al
-      let criticalItems = [];
+      let criticalItems: ExpirationItem[] = [];
       try {
         criticalItems = await expirationService.getCriticalItems();
         console.log('Kritik öğeler yüklendi:', criticalItems);
@@ -122,9 +156,18 @@ export const ExpirationTracking: React.FC = () => {
 
         // Kategorileri düzenle
         if (criticalItems && criticalItems.length > 0) {
-          const uniqueCategories = [
-            ...new Set(criticalItems.map((item) => item.category)),
-          ].filter(Boolean);
+          const uniqueCategories: string[] = [];
+
+          // Kategorileri topla ve filtrele
+          criticalItems.forEach((item) => {
+            if (
+              item.category &&
+              typeof item.category === 'string' &&
+              !uniqueCategories.includes(item.category)
+            ) {
+              uniqueCategories.push(item.category);
+            }
+          });
 
           if (uniqueCategories.length > 0) {
             setCategories(['All Categories', ...uniqueCategories]);
@@ -149,7 +192,8 @@ export const ExpirationTracking: React.FC = () => {
         }
 
         console.log('Expiring items için kullanılan parametreler:', params);
-        const items = await expirationService.getExpiringItems(params);
+        const items: ExpirationItem[] =
+          await expirationService.getExpiringItems(params);
         console.log('Expiring items yüklendi:', items);
 
         // Tabloya eklenecek verileri formatla
@@ -219,7 +263,7 @@ export const ExpirationTracking: React.FC = () => {
     return null;
   };
 
-  const formatExpiringItems = (items: any[]) => {
+  const formatExpiringItems = (items: ExpirationItem[]): ExpiringItem[] => {
     const now = new Date();
 
     return items
@@ -247,12 +291,12 @@ export const ExpirationTracking: React.FC = () => {
           // Nested product objesi varsa (items/ endpoint'inden gelen format)
           productName = item.product.name;
           categoryName = item.product.category
-            ? item.product.category.name
+            ? item.product.category.name || categoryName
             : categoryName;
         }
 
         return {
-          key: item.id || item.stock_item_id || index.toString(),
+          key: (item.id || item.stock_item_id || index).toString(),
           name: productName,
           category: categoryName,
           quantity: item.quantity || 0,
@@ -261,7 +305,7 @@ export const ExpirationTracking: React.FC = () => {
           status: `${daysLeft} days left`,
         };
       })
-      .filter(Boolean); // null değerleri filtrele
+      .filter((item): item is ExpiringItem => item !== null); // null değerleri filtrele
   };
 
   // Table columns

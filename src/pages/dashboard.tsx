@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { Typography, Card, Row, Col, Space, List, Button } from 'antd';
 import {
   LineChartOutlined,
@@ -6,6 +6,7 @@ import {
   WarningOutlined,
   ExclamationCircleOutlined,
 } from '@ant-design/icons';
+import { stockItemService, expirationService } from '../services/api';
 
 const { Title, Text } = Typography;
 
@@ -25,6 +26,42 @@ const BoxOutlined: React.FC<React.SVGProps<SVGSVGElement>> = (props) => (
 );
 
 export const Dashboard: React.FC = () => {
+  // State tanımlamaları
+  const [totalStockItems, setTotalStockItems] = useState<number>(0);
+  const [expiringItemsCount, setExpiringItemsCount] = useState<number>(0);
+  const [loading, setLoading] = useState<boolean>(false);
+
+  // Verileri yükle
+  useEffect(() => {
+    const loadData = async () => {
+      setLoading(true);
+      try {
+        // Stock sayfasından verileri al
+        const stockData = await stockItemService.getAll();
+        if (stockData && Array.isArray(stockData)) {
+          // Tüm ürünlerin toplam stok miktarını hesapla
+          const totalStockCount = stockData.reduce(
+            (sum, item) => sum + (item.quantity || 0),
+            0
+          );
+          setTotalStockItems(totalStockCount);
+        }
+
+        // Expiration sayfasından verileri al
+        const expirationStats = await expirationService.getStats();
+        if (expirationStats) {
+          setExpiringItemsCount(expirationStats.total_expiring || 0);
+        }
+      } catch (error) {
+        console.error('Dashboard verileri yüklenirken hata:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    loadData();
+  }, []);
+
   // Sample quality alerts
   const qualityAlerts = [
     {
@@ -86,7 +123,7 @@ export const Dashboard: React.FC = () => {
               <div>
                 <Text type="secondary">Total Stock Items</Text>
                 <Title level={3} style={{ margin: 0 }}>
-                  2,453
+                  {loading ? 'Yükleniyor...' : totalStockItems}
                 </Title>
               </div>
             </Space>
@@ -128,7 +165,7 @@ export const Dashboard: React.FC = () => {
               <div>
                 <Text type="secondary">Expiring Soon</Text>
                 <Title level={3} style={{ margin: 0 }}>
-                  45
+                  {loading ? 'Yükleniyor...' : expiringItemsCount}
                 </Title>
               </div>
             </Space>

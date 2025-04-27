@@ -131,6 +131,13 @@ export const StockManagement: React.FC = () => {
   // Monitor location field changes
   const [locationValue, setLocationValue] = useState<string>('');
 
+  // Ürün düzenleme modalını göster
+  const [isEditModalVisible, setIsEditModalVisible] = useState<boolean>(false);
+  const [editProductForm] = Form.useForm();
+  const [currentProduct, setCurrentProduct] = useState<ProductTableData | null>(
+    null
+  );
+
   // Handle location change
   const handleLocationChange = (value: string) => {
     setLocationValue(value);
@@ -702,6 +709,58 @@ export const StockManagement: React.FC = () => {
     }
   };
 
+  // Ürün düzenleme modalını göster
+  const showEditProductModal = (record: ProductTableData) => {
+    setCurrentProduct(record);
+    // Form alanlarını mevcut değerlerle doldur
+    editProductForm.setFieldsValue({
+      name: record.name,
+      sku: record.sku,
+      description: '', // Bu bilgi tabloda yok, API'den çekilebilir
+      category_id: record.categoryId,
+      unit_price: parseFloat(record.unitPrice.replace('$', '')),
+    });
+    setIsEditModalVisible(true);
+  };
+
+  // Ürün düzenleme modalını kapat
+  const handleEditCancel = () => {
+    setIsEditModalVisible(false);
+    setCurrentProduct(null);
+    editProductForm.resetFields();
+  };
+
+  // Ürün güncelleme işlemini gerçekleştir
+  const handleUpdateProduct = async (values: any) => {
+    if (!currentProduct) return;
+
+    try {
+      setLoading(true);
+
+      // Ürün bilgilerini güncelle
+      await productService.update(currentProduct.id, values);
+
+      // StockItem varsa ve quantity değişmişse onu da güncelle
+      if (currentProduct.stockItemId && values.quantity) {
+        await stockItemService.update(currentProduct.stockItemId, {
+          product_id: currentProduct.id,
+          quantity: values.quantity,
+          location: values.location || currentProduct.location,
+          batch_number: values.batch_number || '',
+        });
+      }
+
+      message.success('Product updated successfully!');
+      handleEditCancel();
+      loadData(); // Tabloyu yenile
+    } catch (error) {
+      console.error('Failed to update product:', error);
+      message.error('Failed to update product.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   // Table columns
   const columns = [
     {
@@ -762,11 +821,12 @@ export const StockManagement: React.FC = () => {
       key: 'actions',
       render: (_: any, record: ProductTableData) => (
         <Space>
-          <Button type="text" size="small">
+          <Button
+            type="text"
+            size="small"
+            onClick={() => showEditProductModal(record)}
+          >
             Edit
-          </Button>
-          <Button type="text" size="small">
-            Details
           </Button>
         </Space>
       ),
@@ -1130,6 +1190,99 @@ export const StockManagement: React.FC = () => {
           <Form.Item>
             <Button type="primary" htmlType="submit" loading={loading}>
               Create Category
+            </Button>
+          </Form.Item>
+        </Form>
+      </Modal>
+
+      {/* Product Edit Modal */}
+      <Modal
+        title="Edit Product"
+        open={isEditModalVisible}
+        onCancel={handleEditCancel}
+        footer={null}
+        destroyOnClose
+      >
+        <Form
+          form={editProductForm}
+          layout="vertical"
+          onFinish={handleUpdateProduct}
+        >
+          <Form.Item
+            name="name"
+            label="Product Name"
+            rules={[{ required: true, message: 'Please enter product name!' }]}
+          >
+            <Input />
+          </Form.Item>
+
+          <Form.Item
+            name="sku"
+            label="SKU (Stock Code)"
+            rules={[{ required: true, message: 'Please enter SKU!' }]}
+          >
+            <Input />
+          </Form.Item>
+
+          <Form.Item name="description" label="Description">
+            <TextArea rows={4} />
+          </Form.Item>
+
+          <Form.Item
+            name="category_id"
+            label="Category"
+            rules={[{ required: true, message: 'Please select a category!' }]}
+          >
+            <Select>
+              {categories.length > 0
+                ? categories.map((category) => (
+                    <Option key={category.id} value={category.id}>
+                      {category.name}
+                    </Option>
+                  ))
+                : PREDEFINED_CATEGORIES.map((category, index) => (
+                    <Option
+                      key={`predefined-${index}`}
+                      value={`predefined-${index}`}
+                    >
+                      {category.name}
+                    </Option>
+                  ))}
+            </Select>
+          </Form.Item>
+
+          <Form.Item
+            name="unit_price"
+            label="Unit Price"
+            rules={[{ required: true, message: 'Please enter unit price!' }]}
+          >
+            <InputNumber
+              min={0}
+              precision={2}
+              style={{ width: '100%' }}
+              formatter={(value) =>
+                `$ ${value}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')
+              }
+              parser={(value: any) => value.replace(/\$\s?|(,*)/g, '')}
+            />
+          </Form.Item>
+
+          {currentProduct?.stockItemId && (
+            <Form.Item
+              name="quantity"
+              label="Quantity"
+              rules={[{ required: false }]}
+            >
+              <InputNumber min={0} style={{ width: '100%' }} />
+            </Form.Item>
+          )}
+
+          <Form.Item>
+            <Button type="primary" htmlType="submit" loading={loading}>
+              Update Product
+            </Button>
+            <Button style={{ marginLeft: 8 }} onClick={handleEditCancel}>
+              Cancel
             </Button>
           </Form.Item>
         </Form>

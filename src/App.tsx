@@ -1,9 +1,4 @@
-import {
-  AuthBindings,
-  Authenticated,
-  GitHubBanner,
-  Refine,
-} from '@refinedev/core';
+import { AuthBindings, Authenticated, Refine } from '@refinedev/core';
 import { DevtoolsPanel, DevtoolsProvider } from '@refinedev/devtools';
 import { RefineKbar, RefineKbarProvider } from '@refinedev/kbar';
 
@@ -216,7 +211,6 @@ function App() {
 
   return (
     <BrowserRouter>
-      <GitHubBanner />
       <RefineKbarProvider>
         <ColorModeContextProvider>
           <QualityAlertProvider>
@@ -286,7 +280,21 @@ function App() {
                           <ThemedLayoutV2
                             Header={Header}
                             Sider={(props) => (
-                              <ThemedSiderV2 {...props} fixed />
+                              <ThemedSiderV2
+                                {...props}
+                                fixed
+                                Title={() => (
+                                  <div
+                                    style={{
+                                      padding: '12px 24px',
+                                      fontSize: '18px',
+                                      fontWeight: 'bold',
+                                    }}
+                                  >
+                                    QualiStock
+                                  </div>
+                                )}
+                              />
                             )}
                           >
                             <Outlet />
