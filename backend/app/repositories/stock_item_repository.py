@@ -19,6 +19,10 @@ class StockItemRepository(BaseRepository[StockItem]):
         """Ürün ID'sine göre stok öğelerini listeler"""
         return db.query(StockItem).filter(StockItem.product_id == product_id).offset(skip).limit(limit).all()
     
+    def find_by_product_id(self, db: Session, product_id: int) -> Optional[StockItem]:
+        """Ürün ID'sine göre ilk stok öğesini döndürür"""
+        return db.query(StockItem).filter(StockItem.product_id == product_id).first()
+    
     def get_by_location(self, db: Session, location: str, skip: int = 0, limit: int = 100) -> List[StockItem]:
         """Lokasyona göre stok öğelerini listeler"""
         return db.query(StockItem).filter(StockItem.location == location).offset(skip).limit(limit).all()

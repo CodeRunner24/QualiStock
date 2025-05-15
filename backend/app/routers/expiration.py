@@ -54,7 +54,8 @@ async def get_expiring_items(
     ).filter(
         models.StockItem.expiration_date.isnot(None),
         models.StockItem.expiration_date >= now,
-        models.StockItem.expiration_date <= end_date
+        models.StockItem.expiration_date <= end_date,
+        models.StockItem.quantity > 0  # Only include items with quantity greater than zero
     )
     
     # Kategori filtresi
@@ -108,7 +109,8 @@ async def get_expiration_stats(db: Session = Depends(get_db)):
     total_expiring = db.query(func.count(models.StockItem.id)).filter(
         models.StockItem.expiration_date.isnot(None),
         models.StockItem.expiration_date >= now,
-        models.StockItem.expiration_date <= ninety_days
+        models.StockItem.expiration_date <= ninety_days,
+        models.StockItem.quantity > 0  # Only include items with quantity greater than zero
     ).scalar()
     
     # Kritik son kullanma tarihi yaklaşan öğe sayısı (7 gün içinde)
@@ -116,7 +118,8 @@ async def get_expiration_stats(db: Session = Depends(get_db)):
     critical_expiring = db.query(func.count(models.StockItem.id)).filter(
         models.StockItem.expiration_date.isnot(None),
         models.StockItem.expiration_date >= now,
-        models.StockItem.expiration_date <= seven_days
+        models.StockItem.expiration_date <= seven_days,
+        models.StockItem.quantity > 0  # Only include items with quantity greater than zero
     ).scalar()
     
     # Bu hafta sona erecek öğe sayısı
@@ -128,7 +131,8 @@ async def get_expiration_stats(db: Session = Depends(get_db)):
     this_week_expiring = db.query(func.count(models.StockItem.id)).filter(
         models.StockItem.expiration_date.isnot(None),
         func.date(models.StockItem.expiration_date) >= start_of_week,
-        func.date(models.StockItem.expiration_date) <= end_of_week
+        func.date(models.StockItem.expiration_date) <= end_of_week,
+        models.StockItem.quantity > 0  # Only include items with quantity greater than zero
     ).scalar()
     
     # Kategori bazında sona erecek öğe sayısı
@@ -142,7 +146,8 @@ async def get_expiration_stats(db: Session = Depends(get_db)):
             models.Product.category_id == category.id,
             models.StockItem.expiration_date.isnot(None),
             models.StockItem.expiration_date >= now,
-            models.StockItem.expiration_date <= ninety_days
+            models.StockItem.expiration_date <= ninety_days,
+            models.StockItem.quantity > 0  # Only include items with quantity greater than zero
         ).scalar()
         
         if count > 0:
@@ -157,17 +162,20 @@ async def get_expiration_stats(db: Session = Depends(get_db)):
         "0-7_days": db.query(func.count(models.StockItem.id)).filter(
             models.StockItem.expiration_date.isnot(None),
             models.StockItem.expiration_date >= now,
-            models.StockItem.expiration_date <= now + timedelta(days=7)
+            models.StockItem.expiration_date <= now + timedelta(days=7),
+            models.StockItem.quantity > 0  # Only include items with quantity greater than zero
         ).scalar(),
         "8-30_days": db.query(func.count(models.StockItem.id)).filter(
             models.StockItem.expiration_date.isnot(None),
             models.StockItem.expiration_date > now + timedelta(days=7),
-            models.StockItem.expiration_date <= now + timedelta(days=30)
+            models.StockItem.expiration_date <= now + timedelta(days=30),
+            models.StockItem.quantity > 0  # Only include items with quantity greater than zero
         ).scalar(),
         "31-90_days": db.query(func.count(models.StockItem.id)).filter(
             models.StockItem.expiration_date.isnot(None),
             models.StockItem.expiration_date > now + timedelta(days=30),
-            models.StockItem.expiration_date <= now + timedelta(days=90)
+            models.StockItem.expiration_date <= now + timedelta(days=90),
+            models.StockItem.quantity > 0  # Only include items with quantity greater than zero
         ).scalar()
     }
     
@@ -205,7 +213,8 @@ async def get_critical_expiring_items(db: Session = Depends(get_db)):
     ).filter(
         models.StockItem.expiration_date.isnot(None),
         models.StockItem.expiration_date >= now,
-        models.StockItem.expiration_date <= seven_days
+        models.StockItem.expiration_date <= seven_days,
+        models.StockItem.quantity > 0  # Only include items with quantity greater than zero
     ).order_by(models.StockItem.expiration_date).all()
     
     result = []

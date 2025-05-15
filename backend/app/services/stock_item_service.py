@@ -22,6 +22,16 @@ class StockItemService:
                 detail=f"Product with id {stock_item.product_id} not found"
             )
         
+        # Check if this product already has a stock item
+        existing_item = self.repository.find_by_product_id(db, stock_item.product_id)
+        if existing_item:
+            # Update existing item instead of creating a new one
+            for key, value in stock_item.dict().items():
+                setattr(existing_item, key, value)
+            db.commit()
+            db.refresh(existing_item)
+            return existing_item
+        
         return self.repository.create(db, stock_item.dict())
     
     def get_stock_items(
@@ -61,7 +71,7 @@ class StockItemService:
         db_stock_item = self.get_stock_item(db, stock_item_id)
         
         # Eğer ürün ID'si değiştiriliyorsa, yeni ürünün var olup olmadığını kontrol et
-        if stock_item.product_id != db_stock_item.product_id:
+        if stock_item.product_id is not None and stock_item.product_id != db_stock_item.product_id:
             product = self.product_repository.get_by_id(db, stock_item.product_id)
             if not product:
                 raise HTTPException(
@@ -72,9 +82,45 @@ class StockItemService:
         return self.repository.update(db, stock_item_id, stock_item.dict())
     
     def delete_stock_item(self, db: Session, stock_item_id: int) -> None:
-        """Stok öğesini siler"""
+        """Stok öğesini siler veya sıfıra günceller"""
         db_stock_item = self.get_stock_item(db, stock_item_id)
-        self.repository.delete(db, stock_item_id)
+        
+        # Instead of deleting, set quantity to 0 and clear all additional information
+        db_stock_item.quantity = 0
+        db_stock_item.batch_number = ""
+        db_stock_item.manufacturing_date = None
+        db_stock_item.expiration_date = None
+        db_stock_item.location = ""
+        db.commit()
+    
+    def get_or_create_zero_stock(self, db: Session, product_id: int, location: str = "Not in stock", batch_number: str = "EMPTY") -> StockItem:
+        """Bir ürün için stok öğesi bulur veya sıfır stoklu yeni bir öğe oluşturur"""
+        # Check if product exists
+        product = self.product_repository.get_by_id(db, product_id)
+        if not product:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Product with id {product_id} not found"
+            )
+        
+        # Find existing stock item
+        stock_item = self.repository.find_by_product_id(db, product_id)
+        
+        if stock_item:
+            # Update to zero quantity
+            stock_item.quantity = 0
+            db.commit()
+            db.refresh(stock_item)
+            return stock_item
+        else:
+            # Create new stock item with zero quantity
+            stock_data = {
+                "product_id": product_id,
+                "quantity": 0,
+                "location": location,
+                "batch_number": batch_number
+            }
+            return self.repository.create(db, stock_data)
     
     def get_expiring_soon_count(self, db: Session, days: int = 30) -> int:
         """Yakında sona erecek stok öğelerinin sayısını döndürür"""

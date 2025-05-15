@@ -81,8 +81,13 @@ class StockItemBase(BaseModel):
 class StockItemCreate(StockItemBase):
     pass
 
-class StockItemUpdate(StockItemBase):
-    pass
+class StockItemUpdate(BaseModel):
+    product_id: Optional[int] = None
+    quantity: Optional[int] = None
+    location: Optional[str] = None
+    batch_number: Optional[str] = None
+    manufacturing_date: Optional[datetime] = None
+    expiration_date: Optional[datetime] = None
 
 class StockItem(StockItemBase):
     id: int

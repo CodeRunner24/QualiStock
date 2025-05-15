@@ -24,7 +24,17 @@ async def create_stock_item(item: schemas.StockItemCreate, db: Session = Depends
             detail=f"Product with id {item.product_id} not found"
         )
     
-    # Yeni stok öğesini oluştur
+    # Check if stock item already exists for this product
+    existing_stock_item = db.query(models.StockItem).filter(models.StockItem.product_id == item.product_id).first()
+    if existing_stock_item:
+        # Update the existing stock item instead of creating a new one
+        for key, value in item.dict().items():
+            setattr(existing_stock_item, key, value)
+        db.commit()
+        db.refresh(existing_stock_item)
+        return existing_stock_item
+    
+    # Create a new stock item if one doesn't exist
     db_item = models.StockItem(**item.dict())
     db.add(db_item)
     db.commit()
@@ -70,7 +80,7 @@ async def read_stock_item(item_id: int, db: Session = Depends(get_db)):
     return db_item
 
 @router.put("/items/{item_id}", response_model=schemas.StockItem)
-async def update_stock_item(item_id: int, item: schemas.StockItemCreate, db: Session = Depends(get_db)):
+async def update_stock_item(item_id: int, item: schemas.StockItemUpdate, db: Session = Depends(get_db)):
     """
     Stok öğesini günceller.
     """
@@ -81,16 +91,20 @@ async def update_stock_item(item_id: int, item: schemas.StockItemCreate, db: Ses
             detail=f"Stock item with id {item_id} not found"
         )
     
-    # Ürünün var olup olmadığını kontrol et
-    if not db.query(models.Product).filter(models.Product.id == item.product_id).first():
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Product with id {item.product_id} not found"
-        )
+    # Ürünün var olup olmadığını kontrol et (if product_id is provided)
+    if item.product_id is not None:
+        if not db.query(models.Product).filter(models.Product.id == item.product_id).first():
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Product with id {item.product_id} not found"
+            )
     
-    # Stok öğesini güncelle
-    for key, value in item.dict().items():
-        setattr(db_item, key, value)
+    # Stok öğesini güncelle - only update provided fields
+    update_data = item.dict(exclude_unset=True)
+    for key, value in update_data.items():
+        # Only update fields that are not None (to preserve existing values)
+        if value is not None:
+            setattr(db_item, key, value)
     
     db.commit()
     db.refresh(db_item)
@@ -108,9 +122,59 @@ async def delete_stock_item(item_id: int, db: Session = Depends(get_db)):
             detail=f"Stock item with id {item_id} not found"
         )
     
-    db.delete(db_item)
+    # If quantity is already 0, don't delete the item
+    if db_item.quantity == 0:
+        return None
+    
+    # Set quantity to 0 instead of deleting
+    db_item.quantity = 0
+    # Clear all additional information
+    db_item.batch_number = ""
+    db_item.manufacturing_date = None
+    db_item.expiration_date = None
+    db_item.location = ""
     db.commit()
     return None
+
+@router.post("/products/{product_id}/set-zero-stock", response_model=schemas.StockItem)
+async def set_product_stock_to_zero(
+    product_id: int, 
+    location: str = "Not in stock",
+    batch_number: str = "EMPTY",
+    db: Session = Depends(get_db)
+):
+    """
+    Ürün stokunu sıfıra ayarlar. Eğer stok öğesi yoksa, sıfır stoklu bir öğe oluşturur.
+    """
+    # Check if product exists
+    product = db.query(models.Product).filter(models.Product.id == product_id).first()
+    if not product:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Product with id {product_id} not found"
+        )
+    
+    # Check if stock item exists
+    stock_item = db.query(models.StockItem).filter(models.StockItem.product_id == product_id).first()
+    
+    if stock_item:
+        # Update existing stock item to zero
+        stock_item.quantity = 0
+        db.commit()
+        db.refresh(stock_item)
+        return stock_item
+    else:
+        # Create new stock item with zero quantity
+        new_stock = models.StockItem(
+            product_id=product_id,
+            quantity=0,
+            location=location,
+            batch_number=batch_number
+        )
+        db.add(new_stock)
+        db.commit()
+        db.refresh(new_stock)
+        return new_stock
 
 @router.post("/products/", response_model=schemas.Product)
 async def create_product(product: schemas.ProductCreate, db: Session = Depends(get_db)):
@@ -136,6 +200,17 @@ async def create_product(product: schemas.ProductCreate, db: Session = Depends(g
     db.add(db_product)
     db.commit()
     db.refresh(db_product)
+    
+    # Create a stock item with zero quantity for the new product
+    stock_item = models.StockItem(
+        product_id=db_product.id,
+        quantity=0,
+        location="Not in stock",
+        batch_number="EMPTY"
+    )
+    db.add(stock_item)
+    db.commit()
+    
     return db_product
 
 @router.get("/products/", response_model=List[schemas.Product])

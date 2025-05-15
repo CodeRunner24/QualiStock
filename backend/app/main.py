@@ -11,6 +11,7 @@ from .controllers.quality_check_controller import QualityCheckController
 from .controllers.forecast_controller import ForecastController
 import sys
 import os
+from .initialize_missing_stock import initialize_missing_stock_items
 
 # Middleware dizinini Python yoluna ekle
 sys.path.append(os.path.join(os.path.dirname(os.path.dirname(__file__)), "middleware"))
@@ -27,6 +28,9 @@ app = FastAPI(
 
 # CORS ayarlarını yeni middleware ile yap
 app = setup_cors(app)
+
+# Initialize zero-quantity stock items for products missing from stock_items
+initialize_missing_stock_items()
 
 # Eski router'ları dahil et (zamanla tamamen kaldırılabilir)
 app.include_router(auth.router)
