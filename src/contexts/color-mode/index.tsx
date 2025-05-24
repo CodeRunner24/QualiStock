@@ -9,7 +9,7 @@ import {
 
 type ColorModeContextType = {
   mode: string;
-  setMode: (mode: string) => void;
+  setMode: (mode?: string) => void;
 };
 
 export const ColorModeContext = createContext<ColorModeContextType>(

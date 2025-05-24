@@ -382,11 +382,8 @@ export const ExpirationTracking: React.FC = () => {
       <Row gutter={[16, 16]} style={{ marginBottom: 24 }}>
         {statsData.map((stat, index) => (
           <Col span={8} key={index}>
-            <Card
-              bordered={false}
-              bodyStyle={{ padding: '20px', backgroundColor: '#f9f9f9' }}
-            >
-              <Space direction="vertical" size={0}>
+            <Card bordered={false} bodyStyle={{ padding: '20px' }}>
+              <Space direction="vertical" size={0} style={{ width: '100%' }}>
                 <Space align="center">
                   {stat.icon}
                   <Text type="secondary">{stat.title}</Text>

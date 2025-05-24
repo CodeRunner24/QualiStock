@@ -4,7 +4,7 @@ import axios from 'axios';
 const API_URL = 'http://localhost:8001';
 
 // Token yönetimi için yerel depolama anahtarı
-const TOKEN_KEY = 'auth_token';
+const TOKEN_KEY = 'qualistock_token';
 
 // Axios instance'ı
 const api = axios.create({
@@ -136,28 +136,55 @@ api.interceptors.response.use(
 export const authService = {
   login: async (username: string, password: string) => {
     try {
-      const formData = new FormData();
+      console.log('Login attempt:', { username });
+
+      // Correctly format the request data for FastAPI's OAuth2 endpoint
+      const formData = new URLSearchParams();
       formData.append('username', username);
       formData.append('password', password);
 
-      console.log('Login attempt:', { username });
-
-      const response = await api.post('/auth/token', formData, {
+      const response = await fetch('http://localhost:8001/auth/token', {
+        method: 'POST',
         headers: {
-          'Content-Type': 'multipart/form-data',
+          'Content-Type': 'application/x-www-form-urlencoded',
         },
+        body: formData
       });
 
-      if (response.data.access_token) {
-        // Token'ı setAuthToken yardımcı fonksiyonu ile kaydet
-        setAuthToken(response.data.access_token);
+      if (!response.ok) {
+        const errorData = await response.json();
+        console.error('Login response error:', errorData);
+        throw new Error(errorData.detail || 'Incorrect username or password');
+      }
+
+      const data = await response.json();
+
+      if (data.access_token) {
+        // Save token to localStorage
+        localStorage.setItem(TOKEN_KEY, data.access_token);
+        
+        // Update axios headers
+        api.defaults.headers.common['Authorization'] = `Bearer ${data.access_token}`;
+        
         console.log('Login successful, token stored');
+        
+        // Get user information
+        const userResponse = await fetch('http://localhost:8001/auth/users/me', {
+          headers: {
+            Authorization: `Bearer ${data.access_token}`,
+          },
+        });
+
+        if (userResponse.ok) {
+          const userData = await userResponse.json();
+          localStorage.setItem('qualistock_user', JSON.stringify(userData));
+        }
       } else {
-        console.error('Login response missing token:', response.data);
+        console.error('Login response missing token:', data);
         throw new Error('Geçersiz yanıt: Token bulunamadı');
       }
 
-      return response.data;
+      return data;
     } catch (error) {
       console.error('Login error:', error);
       throw error;
@@ -165,7 +192,9 @@ export const authService = {
   },
 
   logout: () => {
-    removeAuthToken();
+    localStorage.removeItem(TOKEN_KEY);
+    localStorage.removeItem('qualistock_user');
+    delete api.defaults.headers.common['Authorization'];
     console.log('User logged out, token removed');
   },
 
@@ -196,9 +225,23 @@ export const userService = {
       console.log('Sending user data:', userPayload);
 
       // Kayıt isteğini gönder
-      const response = await api.post('/users/register', userPayload);
-      console.log('Registration successful:', response.data);
-      return response.data;
+      const response = await fetch('http://localhost:8001/users/register', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(userPayload)
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        console.error('Registration error response:', errorData);
+        throw { response: { data: errorData } };
+      }
+
+      const data = await response.json();
+      console.log('Registration successful:', data);
+      return data;
     } catch (error) {
       console.error('Registration error:', error);
       throw error;
@@ -444,18 +487,27 @@ export const stockItemService = {
 
   update: async (id: number, data: any) => {
     try {
-      // Tarih değerlerini düzenle
-      const stockItemPayload = {
-        ...data,
-        product_id: Number(data.product_id),
-        quantity: Number(data.quantity),
-        manufacturing_date: data.manufacturing_date
+      // Create a payload with only the fields that are provided
+      const stockItemPayload: any = {};
+      
+      // Add provided fields only
+      if (data.product_id !== undefined) stockItemPayload.product_id = Number(data.product_id);
+      if (data.quantity !== undefined) stockItemPayload.quantity = Number(data.quantity);
+      if (data.location !== undefined) stockItemPayload.location = data.location;
+      if (data.batch_number !== undefined) stockItemPayload.batch_number = data.batch_number;
+      
+      // Handle date fields only if they're provided
+      if (data.manufacturing_date !== undefined) {
+        stockItemPayload.manufacturing_date = data.manufacturing_date
           ? new Date(data.manufacturing_date).toISOString()
-          : null,
-        expiration_date: data.expiration_date
+          : null;
+      }
+      
+      if (data.expiration_date !== undefined) {
+        stockItemPayload.expiration_date = data.expiration_date
           ? new Date(data.expiration_date).toISOString()
-          : null,
-      };
+          : null;
+      }
 
       const response = await api.put(`/stock-items/${id}`, stockItemPayload);
       return response.data;

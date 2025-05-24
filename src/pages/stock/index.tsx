@@ -17,6 +17,7 @@ import {
   message,
   DatePicker,
   Tooltip,
+  Alert,
 } from 'antd';
 import {
   SearchOutlined,
@@ -138,6 +139,17 @@ export const StockManagement: React.FC = () => {
     null
   );
 
+  // Batch information modal for zero-to-nonzero transitions
+  const [isBatchInfoModalVisible, setIsBatchInfoModalVisible] = useState<boolean>(false);
+  const [batchInfoForm] = Form.useForm();
+  const [batchInfoLocationValue, setBatchInfoLocationValue] = useState<string>('');
+  const [pendingStockUpdate, setPendingStockUpdate] = useState<{
+    productId: number;
+    stockItemId: number;
+    quantity: number;
+    location: string;
+  } | null>(null);
+
   // Handle location change
   const handleLocationChange = (value: string) => {
     setLocationValue(value);
@@ -172,32 +184,8 @@ export const StockManagement: React.FC = () => {
   // Token kontrolü
   const checkAndPromptForToken = () => {
     const isAuthenticated = authService.isAuthenticated();
-
-    if (!isAuthenticated) {
-      const token = prompt(
-        'API token gerekli. Lütfen token giriniz (Swagger UI /docs sayfasından alabilirsiniz):'
-      );
-
-      if (token) {
-        if (setAuthToken(token)) {
-          message.success('Token başarıyla ayarlandı. Sayfa yenileniyor...');
-          setTimeout(() => {
-            window.location.reload();
-          }, 1000);
-          return true;
-        } else {
-          message.error('Geçersiz token formatı');
-          return false;
-        }
-      } else {
-        message.warning(
-          'Token gerekli. API istekleri yetkilendirilmemiş olarak çalışacak.'
-        );
-        return false;
-      }
-    }
-
-    return true;
+    // Prompt ve mesajlar kaldırıldı, sadece true/false dönüyor
+    return isAuthenticated;
   };
 
   // Load data
@@ -388,44 +376,16 @@ export const StockManagement: React.FC = () => {
         let totalStockCount = 0;
         const categoryData: Record<string, number> = {};
 
-        formattedTableData.forEach(
-          (item: {
-            quantity: number;
-            product?: { unit_price: number; category_id?: number | null };
-          }) => {
-            const quantity = item.quantity || 0;
-            const unitPrice = item.product?.unit_price || 0;
-            const categoryId = item.product?.category_id;
-
-            totalStockCount += quantity;
-            totalStockValue += quantity * unitPrice;
-
-            // Group by category for pie chart
-            if (categoryId) {
-              const category = categoriesData.find(
-                (c: Category) => c.id === categoryId
-              );
-              const categoryName = category?.name || 'Uncategorized';
-              categoryData[categoryName] =
-                (categoryData[categoryName] || 0) + quantity;
-            } else {
-              categoryData['Uncategorized'] =
-                (categoryData['Uncategorized'] || 0) + quantity;
-            }
-          }
-        );
-
-        const categoryChartData = Object.entries(categoryData).map(
-          ([name, value]) => ({
-            name,
-            value,
-          })
-        );
+        formattedTableData.forEach((item: ProductTableData) => {
+          const quantity = item.stock || 0;
+          const unitPrice = parseFloat(item.unitPrice.replace('$', '')) || 0;
+          totalStockValue += quantity * unitPrice;
+        });
 
         setStats({
           totalProducts: productsData.length,
           lowStockItems: formattedTableData.filter(
-            (item: { quantity: number }) => item.quantity < 10
+            (item: ProductTableData) => item.stock > 0 && item.stock < 20
           ).length,
           stockValue: totalStockValue,
         });
@@ -741,12 +701,47 @@ export const StockManagement: React.FC = () => {
       await productService.update(currentProduct.id, values);
 
       // StockItem varsa ve quantity değişmişse onu da güncelle
-      if (currentProduct.stockItemId && values.quantity) {
+      if (currentProduct.stockItemId && values.quantity !== undefined) {
+        // First, get the current stockItem to preserve existing values
+        const currentStockItem = await stockItemService.getById(currentProduct.stockItemId);
+        
+        // Check if stock is changing from 0 to a positive number
+        if (currentStockItem.quantity === 0 && Number(values.quantity) > 0) {
+          // Store the pending update and show batch info modal
+          setPendingStockUpdate({
+            productId: currentProduct.id,
+            stockItemId: currentProduct.stockItemId,
+            quantity: Number(values.quantity),
+            location: values.location || currentStockItem.location
+          });
+          
+          // Reset form fields before showing
+          batchInfoForm.resetFields();
+          
+          // Set initial location value
+          const locationValue = values.location || currentStockItem.location;
+          setBatchInfoLocationValue(locationValue);
+          
+          // Set form initial values
+          batchInfoForm.setFieldsValue({
+            location: locationValue
+          });
+          
+          // Close the edit modal and open batch info modal
+          setIsEditModalVisible(false);
+          setIsBatchInfoModalVisible(true);
+          setLoading(false);
+          return;
+        }
+        
+        // Regular update (not transitioning from zero stock)
         await stockItemService.update(currentProduct.stockItemId, {
           product_id: currentProduct.id,
           quantity: values.quantity,
-          location: values.location || currentProduct.location,
-          batch_number: values.batch_number || '',
+          location: values.location || currentStockItem.location,
+          batch_number: currentStockItem.batch_number || '',
+          manufacturing_date: currentStockItem.manufacturing_date,
+          expiration_date: currentStockItem.expiration_date,
         });
       }
 
@@ -759,6 +754,59 @@ export const StockManagement: React.FC = () => {
     } finally {
       setLoading(false);
     }
+  };
+
+  // Handle batch information submission
+  const handleBatchInfoSubmit = async (values: any) => {
+    if (!pendingStockUpdate) return;
+    
+    try {
+      setLoading(true);
+      
+      // Handle location selection
+      let locationValue = values.location;
+      if (locationValue === 'new' && values.newLocation) {
+        locationValue = values.newLocation;
+        
+        // Add the new location to the locations list if it's not there
+        if (!locations.includes(values.newLocation)) {
+          setLocations([...locations, values.newLocation]);
+        }
+      }
+      
+      await stockItemService.update(pendingStockUpdate.stockItemId, {
+        product_id: pendingStockUpdate.productId,
+        quantity: pendingStockUpdate.quantity,
+        location: locationValue,
+        batch_number: values.batch_number,
+        manufacturing_date: values.manufacturing_date,
+        expiration_date: values.expiration_date,
+      });
+      
+      message.success('Product and batch information updated successfully!');
+      setIsBatchInfoModalVisible(false);
+      setPendingStockUpdate(null);
+      loadData(); // Tabloyu yenile
+    } catch (error) {
+      console.error('Failed to update batch information:', error);
+      message.error('Failed to update batch information.');
+    } finally {
+      setLoading(false);
+    }
+  };
+  
+  // Handle location change for batch info modal
+  const handleBatchInfoLocationChange = (value: string) => {
+    setBatchInfoLocationValue(value);
+    if (value === 'new') {
+      batchInfoForm.setFieldsValue({ newLocation: '' });
+    }
+  };
+
+  // Cancel batch info modal
+  const handleBatchInfoCancel = () => {
+    setIsBatchInfoModalVisible(false);
+    setPendingStockUpdate(null);
   };
 
   // Table columns
@@ -827,6 +875,15 @@ export const StockManagement: React.FC = () => {
             onClick={() => showEditProductModal(record)}
           >
             Edit
+          </Button>
+          <Button
+            type="text"
+            danger
+            size="small"
+            icon={<DeleteOutlined />}
+            onClick={() => handleDeleteProduct(record)}
+          >
+            Delete
           </Button>
         </Space>
       ),
@@ -1018,6 +1075,91 @@ export const StockManagement: React.FC = () => {
       ),
     },
   ];
+
+  // Handle product deletion
+  const handleDeleteProduct = (record: ProductTableData) =>
+    Modal.confirm({
+      title: 'Are you sure you want to delete this product?',
+      content: (
+        <div>
+          <p>Product: <strong>{record.name}</strong></p>
+          <p>SKU: {record.sku}</p>
+          <p>This action will permanently delete the product and its stock information.</p>
+          <p>All manufacturing dates, expiration dates, batch numbers, and location information will also be deleted.</p>
+          <p style={{ color: 'red' }}>This action cannot be undone.</p>
+        </div>
+      ),
+      okText: 'Yes, Delete',
+      okType: 'danger',
+      cancelText: 'Cancel',
+      onOk: async () => {
+        try {
+          setLoading(true);
+          let deletionSuccessful = false;
+          
+          try {
+            // First, get all stock items for this product
+            const allStockItems = await productService.getStockItems(record.id);
+            
+            // Delete all associated stock items first
+            if (allStockItems && allStockItems.length > 0) {
+              // Show a message about deleting stock items
+              message.loading(`Deleting ${allStockItems.length} stock items for this product...`, 1);
+              
+              // Delete each stock item one by one
+              for (const stockItem of allStockItems) {
+                await stockItemService.delete(stockItem.id);
+              }
+            }
+            
+            // Then delete the product
+            await productService.delete(record.id);
+            deletionSuccessful = true;
+          } catch (deleteError: any) {
+            console.error('Error during standard deletion process:', deleteError);
+            
+            // If we can't delete normally, try an alternative approach - set quantity to 0
+            try {
+              if (record.stockItemId) {
+                await stockItemService.update(record.stockItemId, {
+                  quantity: 0,
+                  location: "",
+                  batch_number: "",
+                  manufacturing_date: null,
+                  expiration_date: null
+                });
+                message.success(`Product "${record.name}" stock has been set to zero and stock information has been cleared`);
+                deletionSuccessful = true;
+              }
+            } catch (fallbackError) {
+              console.error('Error during fallback deletion process:', fallbackError);
+              throw deleteError; // Throw the original error
+            }
+          }
+          
+          if (deletionSuccessful) {
+            message.success(`Product "${record.name}" has been processed successfully`);
+            loadData(); // Refresh the table
+          } else {
+            message.error(`Unable to process product "${record.name}"`);
+          }
+        } catch (error: any) {
+          console.error('Error deleting product:', error);
+          
+          // Only show error message if we haven't already handled it above
+          if (error.response && error.response.data && error.response.data.detail) {
+            // If the error mentions stock items but we know we've set quantity to zero, don't show error
+            if (!error.response.data.detail.includes("stock items") || record.stock !== 0) {
+              message.error(error.response.data.detail);
+            }
+          } else {
+            message.error('Failed to delete product. Please try again.');
+          }
+        } finally {
+          setLoading(false);
+        }
+      },
+    });
 
   return (
     <div style={{ padding: 24 }}>
@@ -1282,6 +1424,80 @@ export const StockManagement: React.FC = () => {
               Update Product
             </Button>
             <Button style={{ marginLeft: 8 }} onClick={handleEditCancel}>
+              Cancel
+            </Button>
+          </Form.Item>
+        </Form>
+      </Modal>
+
+      {/* Batch Information Modal */}
+      <Modal
+        title="Enter Batch Information"
+        open={isBatchInfoModalVisible}
+        onCancel={handleBatchInfoCancel}
+        footer={null}
+        destroyOnClose
+      >
+        <Form
+          form={batchInfoForm}
+          layout="vertical"
+          onFinish={handleBatchInfoSubmit}
+        >
+          <Alert
+            message="Product Stock Update"
+            description="This product's stock is changing from zero. Please provide batch information."
+            type="info"
+            showIcon
+            style={{ marginBottom: 16 }}
+          />
+          
+          <Form.Item
+            name="batch_number"
+            label="Batch Number"
+            rules={[{ required: true, message: 'Batch number is mandatory!' }]}
+          >
+            <Input />
+          </Form.Item>
+
+          <Form.Item
+            name="location"
+            label="Location"
+            initialValue={batchInfoLocationValue}
+            rules={[{ required: true, message: 'Please specify a location!' }]}
+          >
+            <Select onChange={handleBatchInfoLocationChange}>
+              {locations.map((location) => (
+                <Option key={location} value={location}>
+                  {location}
+                </Option>
+              ))}
+              <Option value="new">+ Add New Location</Option>
+            </Select>
+          </Form.Item>
+
+          {batchInfoLocationValue === 'new' && (
+            <Form.Item
+              name="newLocation"
+              label="New Location Name"
+              rules={[{ required: true, message: 'Please enter new location name!' }]}
+            >
+              <Input placeholder="Enter new location name" />
+            </Form.Item>
+          )}
+
+          <Form.Item name="manufacturing_date" label="Manufacturing Date">
+            <DatePicker style={{ width: '100%' }} />
+          </Form.Item>
+
+          <Form.Item name="expiration_date" label="Expiration Date">
+            <DatePicker style={{ width: '100%' }} />
+          </Form.Item>
+
+          <Form.Item>
+            <Button type="primary" htmlType="submit" loading={loading}>
+              Update Stock Information
+            </Button>
+            <Button style={{ marginLeft: 8 }} onClick={handleBatchInfoCancel}>
               Cancel
             </Button>
           </Form.Item>

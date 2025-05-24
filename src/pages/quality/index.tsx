@@ -128,24 +128,29 @@ export const QualityControl: React.FC = () => {
       <Row gutter={[16, 16]} style={{ marginBottom: 24 }}>
         {dashboardStats.map((stat, index) => (
           <Col span={6} key={index}>
-            <Card
-              bordered={false}
-              bodyStyle={{ padding: '20px', backgroundColor: '#f9f9f9' }}
-            >
-              <Space direction="vertical" size={2} style={{ width: '100%' }}>
+            <Card bordered={false} bodyStyle={{ padding: '20px' }}>
+              <Space direction="vertical" size={0} style={{ width: '100%' }}>
                 <Space align="center">
                   {stat.icon}
                   <Text type="secondary">{stat.title}</Text>
                 </Space>
-                <Title level={3} style={{ margin: 0 }}>
-                  {stat.value}
-                </Title>
-                <Text
-                  type={stat.changeType === 'increase' ? 'success' : 'danger'}
-                  style={{ fontSize: '12px' }}
-                >
-                  {stat.change}
-                </Text>
+                <Row align="middle" gutter={8}>
+                  <Col>
+                    <Title level={2} style={{ margin: '8px 0 0 0' }}>
+                      {stat.value}
+                    </Title>
+                  </Col>
+                  <Col>
+                    <Tag
+                      color={
+                        stat.changeType === 'increase' ? 'success' : 'error'
+                      }
+                      style={{ margin: 0 }}
+                    >
+                      {stat.change}
+                    </Tag>
+                  </Col>
+                </Row>
               </Space>
             </Card>
           </Col>
@@ -206,10 +211,16 @@ export const QualityControl: React.FC = () => {
               padding: '12px 16px',
               backgroundColor:
                 inspection.status === 'pending'
-                  ? '#fffbe6'
+                  ? '#23272f'
                   : inspection.status === 'passed'
-                  ? '#f6ffed'
-                  : '#fff1f0',
+                  ? '#1e2e22'
+                  : '#2a1e1e',
+              color:
+                inspection.status === 'pending'
+                  ? '#faad14'
+                  : inspection.status === 'passed'
+                  ? '#52c41a'
+                  : '#ff4d4f',
               borderTopLeftRadius: 8,
               borderTopRightRadius: 8,
               display: 'flex',
@@ -217,11 +228,11 @@ export const QualityControl: React.FC = () => {
               alignItems: 'center',
             }}
           >
-            <Text strong>
+            <Text strong style={{ color: 'inherit' }}>
               {inspection.status.charAt(0).toUpperCase() +
                 inspection.status.slice(1)}
             </Text>
-            <Text type="secondary">{inspection.time}</Text>
+            <Text type="secondary" style={{ color: '#b0b0b0' }}>{inspection.time}</Text>
           </div>
           <div style={{ padding: '16px' }}>
             <div

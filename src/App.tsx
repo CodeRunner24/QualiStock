@@ -227,7 +227,6 @@ function App() {
                       list: '/dashboard',
                       meta: {
                         label: 'Dashboard',
-                        icon: 'dashboard',
                       },
                     },
                     {
@@ -235,7 +234,6 @@ function App() {
                       list: '/stock',
                       meta: {
                         label: 'Stock Management',
-                        icon: 'database',
                       },
                     },
                     {
@@ -243,7 +241,6 @@ function App() {
                       list: '/quality',
                       meta: {
                         label: 'Quality Control',
-                        icon: 'safety-certificate',
                       },
                     },
                     {
@@ -251,7 +248,6 @@ function App() {
                       list: '/expiration',
                       meta: {
                         label: 'Expiration Tracking',
-                        icon: 'calendar',
                       },
                     },
                     {
@@ -259,7 +255,6 @@ function App() {
                       list: '/forecasting',
                       meta: {
                         label: 'Forecasting',
-                        icon: 'line-chart',
                       },
                     },
                   ]}

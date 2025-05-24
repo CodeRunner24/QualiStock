@@ -7,7 +7,6 @@ import {
   SafetyCertificateOutlined,
   CalendarOutlined,
   LineChartOutlined,
-  SettingOutlined,
   LogoutOutlined,
 } from '@ant-design/icons';
 
@@ -39,11 +38,6 @@ export const Sidebar: React.FC = () => {
       key: 'forecasting',
       icon: <LineChartOutlined />,
       label: <Link to="/forecasting">Forecasting</Link>,
-    },
-    {
-      key: 'settings',
-      icon: <SettingOutlined />,
-      label: <Link to="/settings">Settings</Link>,
     },
     {
       key: 'logout',

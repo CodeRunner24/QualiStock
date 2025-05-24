@@ -12,7 +12,7 @@ import {
   message,
 } from 'antd';
 import { useState } from 'react';
-import { setAuthToken } from '../services/api';
+import { setAuthToken, authService, userService } from '../services/api';
 
 type LoginFormValues = {
   username: string;
@@ -32,16 +32,19 @@ export const Login: React.FC = () => {
   const [activeTab, setActiveTab] = useState<string>('login');
   const [form] = Form.useForm();
   const [tokenForm] = Form.useForm();
+  const [isSignupLoading, setIsSignupLoading] = useState(false);
 
   const handleLogin = (values: LoginFormValues) => {
+    // Use the Refine login hook which is connected to the authProvider
     login(values, {
       onSuccess: () => {
         setLoginError(null);
       },
       onError: (error) => {
+        console.error('Login error:', error);
         setLoginError(
-          error?.message ||
-            'Giriş başarısız. Lütfen bilgilerinizi kontrol edin.'
+          error?.message || 
+          'Giriş başarısız. Lütfen bilgilerinizi kontrol edin.'
         );
       },
     });
@@ -54,44 +57,46 @@ export const Login: React.FC = () => {
     }
 
     try {
-      // Backend API'ye kayıt isteği gönder
-      const response = await fetch('http://localhost:8001/users/register', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          username: values.username,
-          email: values.email,
-          password: values.password,
-        }),
+      setIsSignupLoading(true);
+      // Use the userService for registration
+      await userService.register({
+        username: values.username,
+        email: values.email,
+        password: values.password,
+        is_active: true,
+        is_admin: false
       });
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        message.error(errorData.detail || 'Kayıt sırasında bir hata oluştu!');
-        return;
-      }
 
       message.success('Kayıt başarılı! Şimdi giriş yapabilirsiniz.');
       setActiveTab('login');
       form.resetFields();
-    } catch (error) {
+    } catch (error: any) {
       console.error('Registration error:', error);
-      message.error('Kayıt sırasında bir hata oluştu!');
+      message.error(error?.response?.data?.detail || 'Kayıt sırasında bir hata oluştu!');
+    } finally {
+      setIsSignupLoading(false);
     }
   };
 
   const handleTokenLogin = (values: { token: string }) => {
-    if (setAuthToken(values.token)) {
-      message.success(
-        'Token başarıyla ayarlandı. Anasayfaya yönlendiriliyorsunuz...'
-      );
-      setTimeout(() => {
-        window.location.href = '/';
-      }, 1000);
-    } else {
-      message.error('Geçersiz token. Lütfen doğru bir token giriniz.');
+    try {
+      if (values.token) {
+        // Save token to localStorage
+        localStorage.setItem('qualistock_token', values.token);
+        
+        message.success(
+          'Token başarıyla ayarlandı. Anasayfaya yönlendiriliyorsunuz...'
+        );
+        
+        setTimeout(() => {
+          window.location.href = '/dashboard';
+        }, 1000);
+      } else {
+        message.error('Geçersiz token. Lütfen doğru bir token giriniz.');
+      }
+    } catch (error) {
+      console.error('Token login error:', error);
+      message.error('Token ile giriş yapılırken bir hata oluştu.');
     }
   };
 
@@ -158,10 +163,10 @@ export const Login: React.FC = () => {
                     <Input.Password placeholder="Şifre girin" size="large" />
                   </Form.Item>
 
-                  {(loginError || error) && (
+                  {loginError && (
                     <Alert
                       message="Giriş Hatası"
-                      description={loginError || (error as Error)?.message}
+                      description={loginError}
                       type="error"
                       showIcon
                       style={{ marginBottom: 16 }}
@@ -249,6 +254,7 @@ export const Login: React.FC = () => {
                   <Form.Item
                     label="Şifre Tekrar"
                     name="confirmPassword"
+                    dependencies={['password']}
                     rules={[
                       {
                         required: true,
@@ -260,7 +266,7 @@ export const Login: React.FC = () => {
                             return Promise.resolve();
                           }
                           return Promise.reject(
-                            new Error('İki şifre eşleşmiyor!')
+                            new Error('İki şifre birbiriyle eşleşmiyor!')
                           );
                         },
                       }),
@@ -273,7 +279,13 @@ export const Login: React.FC = () => {
                   </Form.Item>
 
                   <Form.Item>
-                    <Button type="primary" size="large" htmlType="submit" block>
+                    <Button
+                      type="primary"
+                      size="large"
+                      htmlType="submit"
+                      loading={isSignupLoading}
+                      block
+                    >
                       Kayıt Ol
                     </Button>
                   </Form.Item>
@@ -282,7 +294,7 @@ export const Login: React.FC = () => {
             },
             {
               key: 'token',
-              label: 'Token ile Giriş',
+              label: 'Token Girişi',
               children: (
                 <Form
                   layout="vertical"
@@ -291,15 +303,18 @@ export const Login: React.FC = () => {
                   form={tokenForm}
                 >
                   <Form.Item
-                    label="API Token"
+                    label="Token"
                     name="token"
                     rules={[
-                      { required: true, message: 'Lütfen API token giriniz!' },
+                      {
+                        required: true,
+                        message: 'Lütfen bir token girin!',
+                      },
                     ]}
                   >
-                    <Input.TextArea
-                      placeholder="Swagger UI /docs sayfasından aldığınız token'ı yapıştırın"
-                      rows={4}
+                    <Input.Password
+                      placeholder="JWT token girin"
+                      size="large"
                     />
                   </Form.Item>
 
@@ -308,15 +323,6 @@ export const Login: React.FC = () => {
                       Token ile Giriş Yap
                     </Button>
                   </Form.Item>
-
-                  <Typography.Text
-                    type="secondary"
-                    style={{ display: 'block', textAlign: 'center' }}
-                  >
-                    <small>
-                      Token'ı Swagger UI'dan (/docs) elde edebilirsiniz
-                    </small>
-                  </Typography.Text>
                 </Form>
               ),
             },
